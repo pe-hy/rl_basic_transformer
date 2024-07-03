@@ -117,8 +117,8 @@ def main(args):
     train_dataset = torch.utils.data.TensorDataset(train_data[0], train_data[1])
     test_dataset = torch.utils.data.TensorDataset(test_data[0], test_data[1])
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.num_workers,shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.num_workers,shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.num_workers, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.num_workers, shuffle=False)
 
     callback_list = []
     model = NanoGPT(vocab_size=64,block_size=args.block_size,n_layer=args.n_layer,n_head=args.n_head,n_embd=args.n_embd)
@@ -128,12 +128,14 @@ def main(args):
         args,
         max_epochs=args.num_epochs,
         gradient_clip_val=1.0,
-        callbacks=callback_list,
-        accelerator="auto",
+        #callbacks=callback_list,
+        accelerator="cuda",
         logger=wandb_logger,
         #devices=args.devices,
         precision=16,
-        val_check_interval=100
+        val_check_interval=100,
+        #checkpoint_callback=True,
+        default_root_dir="/home/p23131/rl/basic_transformer/model"
     )
 
     trainer.fit(model, train_loader, test_loader)
@@ -146,7 +148,7 @@ if __name__ == "__main__":
     parser = L.Trainer.add_argparse_args(parser)
     parser.add_argument("--project_name", default='cc', type=str)
     parser.add_argument("--data_folder", default='data',type=str)
-    parser.add_argument("--n_layer", default= 1,type=int)
+    parser.add_argument("--n_layer", default=1,type=int)
     parser.add_argument("--n_head", default=1,type=int)
     parser.add_argument("--n_embd", default=128,type=int)
     parser.add_argument("--n_hidden", default=64,type=int)
@@ -160,3 +162,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args)
+
+    # uložit a načíst model, když dám jeden example tak chci vidět attention mapu, kterou vytvoří první attention vrstva.
+    # přes forward hook
