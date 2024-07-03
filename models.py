@@ -46,7 +46,8 @@ class CausalSelfAttention(nn.Module):
         #if not self.flash:
         #    print("WARNING: using slow attention. Flash Attention requires PyTorch >= 2.0")
             # causal mask to ensure that attention is only applied to the left in the input sequence
-        self.bias = 1 - torch.eye(config.block_size, config.block_size).view(1, 1, config.block_size, config.block_size)
+        bias = 1 - torch.eye(config.block_size, config.block_size).view(1, 1, config.block_size, config.block_size)
+        self.register_buffer("bias",bias)
         # flip 0s and 1s
 
 
