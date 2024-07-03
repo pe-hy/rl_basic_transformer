@@ -1,0 +1,5 @@
+[default]
+entity = petr-hyner10
+project = rl
+base_url = https://api.wandb.ai
+

@@ -1,6 +1,8 @@
 from argparse import ArgumentParser
 from urllib.request import urlopen
 
+import pickle
+
 import lightning as L
 import torch
 from torch.utils.data import DataLoader
@@ -36,6 +38,8 @@ class NanoGPT(LightningModule):
         self.save_hyperparameters()
         self.config = models.GPTConfig(vocab_size=vocab_size, block_size=block_size, n_layer=n_layer, n_head=n_head, n_embd=n_embd, dropout=dropout)
         self.gpt = models.GPT(self.config)
+        self.validation_step_outputs = []
+
 
     def forward(self, idx: torch.Tensor, targets: Optional[torch.Tensor] = None) -> torch.Tensor:
         return self.gpt(idx, targets)
@@ -53,24 +57,61 @@ class NanoGPT(LightningModule):
         self.log("train_loss", loss)
         return loss
     
-    def validation_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
+    # def validation_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
+    #     idx, targets = batch
+    #     _, loss1 = self(idx, targets)
+    #     self.log("validation_loss", loss1,prog_bar=True)
+    #     return loss1
+    
+    def validation_step(self, batch, batch_idx):
         idx, targets = batch
-        _, loss1 = self(idx, targets)
-        self.log("validation_loss", loss1,prog_bar=True)
-        return loss1
+        logits, loss = self(idx, targets)
+        accuracy = self.calculate_accuracy(logits, targets)
+        
+        self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('val_accuracy', accuracy, on_step=True, on_epoch=True, prog_bar=True)
+        
+        self.validation_step_outputs.append(accuracy)
+        return {'val_loss': loss, 'val_accuracy': accuracy}
 
-def get_random_bool(num_samples,input_length):
-    # create a dataset of num_samples samples with strings of bools of length input_length as input x and random bool as output y
-    x = torch.randint(0, 2, (num_samples, input_length))
-    y = torch.randint(0, 2, (num_samples, 1))
-    return x,y
+    def on_validation_epoch_end(self):
+        avg_accuracy = torch.stack(self.validation_step_outputs).mean()
+        self.log('epoch_val_accuracy', avg_accuracy, prog_bar=True)
+        print(f"Validation Epoch End: Accuracy = {avg_accuracy.item():.4f}")
+        self.validation_step_outputs.clear()
 
+    def calculate_accuracy(self, logits, targets):
+        predictions = torch.argmax(logits, dim=-1)
+        return (predictions == targets).float().mean()
+
+def get_data(data, input_length, flag):
+    if flag:
+        dataset = data["test"]
+    else:
+        dataset = data["train"]
+    
+    num_samples = len(dataset)
+    
+    # Initialize x and y with the correct shapes
+    x = torch.zeros((num_samples, input_length), dtype=torch.long)
+    y = torch.zeros((num_samples, 1), dtype=torch.long)
+    print(len(x))
+    print(len(y))
+    # Fill x and y with data
+    for i, sample in enumerate(dataset):
+        x[i] = torch.tensor(sample['input'])
+        y[i] = torch.tensor([sample['out']])
+    print(len(x))
+    print(len(y))
+    return x, y
 
 
 def main(args):
+    with open ("data.pkl", "rb") as f:
+        data = pickle.load(f)
     # create torch dataset for train and test
-    train_data= get_random_bool(100, args.block_size) 
-    test_data = get_random_bool(10, args.block_size)
+    train_data = get_data(data, 7, False) 
+    test_data = get_data(data, 7, True)
     # convert train data to torch dataset
 
     train_dataset = torch.utils.data.TensorDataset(train_data[0], train_data[1])
@@ -80,7 +121,7 @@ def main(args):
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.num_workers,shuffle=False)
 
     callback_list = []
-    model = NanoGPT(vocab_size=2,block_size=args.block_size,n_layer=args.n_layer,n_head=args.n_head,n_embd=args.n_embd)
+    model = NanoGPT(vocab_size=64,block_size=args.block_size,n_layer=args.n_layer,n_head=args.n_head,n_embd=args.n_embd)
 
     wandb_logger = WandbLogger(project=args.project_name, name=args.data_folder, save_dir=args.data_folder)
     trainer = L.Trainer.from_argparse_args(
@@ -88,10 +129,11 @@ def main(args):
         max_epochs=args.num_epochs,
         gradient_clip_val=1.0,
         callbacks=callback_list,
-        accelerator="auto",
+        accelerator="cpu",
         logger=wandb_logger,
         #devices=args.devices,
         precision=16,
+        val_check_interval=100
     )
 
     trainer.fit(model, train_loader, test_loader)
@@ -109,7 +151,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_embd", default=64,type=int)
     parser.add_argument("--n_hidden", default=64,type=int)
     parser.add_argument("--tied", type=bool)
-    parser.add_argument("--num_epochs", default=100, type=int)
+    parser.add_argument("--num_epochs", default=1, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
     parser.add_argument("--wdecay", default=1.2e-6, type=float)
     parser.add_argument("--block_size", default=8, type=int)
