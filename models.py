@@ -72,10 +72,11 @@ class CausalSelfAttention(nn.Module):
         att = self.attn_dropout(att)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
-
+        # attn_scores = torch.matmul(q, k.transpose(-1, -2)) / math.sqrt(self.n_embd)
+        # attn_weights = F.softmax(attn_scores, dim=-1)
         # output projection
         y = self.resid_dropout(self.c_proj(y))
-        return y
+        return y, att
 
 class MLP(nn.Module):
 
@@ -103,8 +104,9 @@ class Block(nn.Module):
         self.mlp = MLP(config)
 
     def forward(self, x):
-        x = x + self.attn(self.ln_1(x))
-        #x = x + self.mlp(self.ln_2(x))
+        x = x + self.attn(self.ln_1(x))[0]
+        # x = x + self.attn(x)[0]
+        x = x + self.mlp(self.ln_2(x))
         return x
 
 @dataclass
@@ -178,7 +180,7 @@ class GPT(nn.Module):
         # forward the GPT model itself
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
         # reinitialize the last token to random unit vector
-        tok_emb[:,-1,:] = torch.nn.init.normal_(torch.empty(tok_emb[:,-1,:].shape), mean=0.0, std=0.02).to(device)
+        # tok_emb[:,-1,:] = torch.nn.init.normal_(torch.empty(tok_emb[:,-1,:].shape), mean=0.0, std=0.02).to(device)
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
         x = self.transformer.drop(tok_emb + pos_emb)
         for block in self.transformer.h:

@@ -95,19 +95,15 @@ def get_data(data, input_length, flag):
     # Initialize x and y with the correct shapes
     x = torch.zeros((num_samples, input_length), dtype=torch.long)
     y = torch.zeros((num_samples, 1), dtype=torch.long)
-    print(len(x))
-    print(len(y))
     # Fill x and y with data
     for i, sample in enumerate(dataset):
         x[i] = torch.tensor(sample['input'])
         y[i] = torch.tensor([sample['out']])
-    print(len(x))
-    print(len(y))
     return x, y
 
 
 def main(args):
-    with open ("data.pkl", "rb") as f:
+    with open ("/home/p23131/rl/rl_basic_transformer/data_c.pkl", "rb") as f:
         data = pickle.load(f)
     # create torch dataset for train and test
     train_data = get_data(data, 7, False) 
@@ -135,7 +131,7 @@ def main(args):
         precision=16,
         val_check_interval=100,
         #checkpoint_callback=True,
-        default_root_dir="/home/p23131/rl/basic_transformer/model"
+        #default_root_dir="/home/p23131/rl/basic_transformer/model"
     )
 
     trainer.fit(model, train_loader, test_loader)
@@ -148,12 +144,12 @@ if __name__ == "__main__":
     parser = L.Trainer.add_argparse_args(parser)
     parser.add_argument("--project_name", default='cc', type=str)
     parser.add_argument("--data_folder", default='data',type=str)
-    parser.add_argument("--n_layer", default=1,type=int)
+    parser.add_argument("--n_layer", default=2,type=int)
     parser.add_argument("--n_head", default=1,type=int)
     parser.add_argument("--n_embd", default=128,type=int)
     parser.add_argument("--n_hidden", default=64,type=int)
     parser.add_argument("--tied", type=bool)
-    parser.add_argument("--num_epochs", default=1, type=int)
+    parser.add_argument("--num_epochs", default=1000, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
     parser.add_argument("--wdecay", default=1.2e-6, type=float)
     parser.add_argument("--block_size", default=8, type=int)
