@@ -98,12 +98,12 @@ def get_data(data, input_length, flag):
     # Fill x and y with data
     for i, sample in enumerate(dataset):
         x[i] = torch.tensor(sample['input'])
-        y[i] = torch.tensor([sample['out']])
+        y[i] = torch.tensor([sample['target_idx']])
     return x, y
 
 
 def main(args):
-    with open ("/home/p23131/rl/rl_basic_transformer/data_c.pkl", "rb") as f:
+    with open ("/mnt/raid/data/Hyner_Petr/rl/rl_basic_transformer/new_data.pkl", "rb") as f:
         data = pickle.load(f)
     # create torch dataset for train and test
     train_data = get_data(data, 7, False) 
@@ -117,7 +117,7 @@ def main(args):
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.num_workers, shuffle=False)
 
     callback_list = []
-    model = NanoGPT(vocab_size=64,block_size=args.block_size,n_layer=args.n_layer,n_head=args.n_head,n_embd=args.n_embd)
+    model = NanoGPT(vocab_size=80,block_size=args.block_size,n_layer=args.n_layer,n_head=args.n_head,n_embd=args.n_embd)
 
     wandb_logger = WandbLogger(project=args.project_name, name=args.data_folder, save_dir=args.data_folder)
     trainer = L.Trainer.from_argparse_args(
@@ -149,7 +149,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_embd", default=128,type=int)
     parser.add_argument("--n_hidden", default=64,type=int)
     parser.add_argument("--tied", type=bool)
-    parser.add_argument("--num_epochs", default=1000, type=int)
+    parser.add_argument("--num_epochs", default=1, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
     parser.add_argument("--wdecay", default=1.2e-6, type=float)
     parser.add_argument("--block_size", default=8, type=int)
