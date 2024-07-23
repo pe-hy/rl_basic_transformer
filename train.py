@@ -106,8 +106,8 @@ def main(args):
     with open ("/mnt/raid/data/Hyner_Petr/rl/rl_basic_transformer/new_data.pkl", "rb") as f:
         data = pickle.load(f)
     # create torch dataset for train and test
-    train_data = get_data(data, 7, False) 
-    test_data = get_data(data, 7, True)
+    train_data = get_data(data, 20, False) 
+    test_data = get_data(data, 20, True)
     # convert train data to torch dataset
 
     train_dataset = torch.utils.data.TensorDataset(train_data[0], train_data[1])
@@ -117,7 +117,7 @@ def main(args):
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.num_workers, shuffle=False)
 
     callback_list = []
-    model = NanoGPT(vocab_size=80,block_size=args.block_size,n_layer=args.n_layer,n_head=args.n_head,n_embd=args.n_embd)
+    model = NanoGPT(vocab_size=92,block_size=args.block_size,n_layer=args.n_layer,n_head=args.n_head,n_embd=args.n_embd)
 
     wandb_logger = WandbLogger(project=args.project_name, name=args.data_folder, save_dir=args.data_folder)
     trainer = L.Trainer.from_argparse_args(
@@ -144,15 +144,15 @@ if __name__ == "__main__":
     parser = L.Trainer.add_argparse_args(parser)
     parser.add_argument("--project_name", default='cc', type=str)
     parser.add_argument("--data_folder", default='data',type=str)
-    parser.add_argument("--n_layer", default=2,type=int)
+    parser.add_argument("--n_layer", default=1,type=int)
     parser.add_argument("--n_head", default=1,type=int)
-    parser.add_argument("--n_embd", default=128,type=int)
+    parser.add_argument("--n_embd", default=32,type=int)
     parser.add_argument("--n_hidden", default=64,type=int)
     parser.add_argument("--tied", type=bool)
-    parser.add_argument("--num_epochs", default=1, type=int)
+    parser.add_argument("--num_epochs", default=30, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
     parser.add_argument("--wdecay", default=1.2e-6, type=float)
-    parser.add_argument("--block_size", default=8, type=int)
+    parser.add_argument("--block_size", default=32, type=int)
     parser.add_argument("--batch_size", default=64, type=int)
     parser.add_argument("--num_workers", default=4, type=int)
     args = parser.parse_args()
