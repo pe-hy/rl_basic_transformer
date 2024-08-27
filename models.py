@@ -183,8 +183,11 @@ class GPT(nn.Module):
         # tok_emb[:,-1,:] = torch.nn.init.normal_(torch.empty(tok_emb[:,-1,:].shape), mean=0.0, std=0.02).to(device)
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
         x = self.transformer.drop(tok_emb + pos_emb)
-        for block in self.transformer.h:
-            x = block(x)
+        # for block in self.transformer.h: # experiment
+        #     x = block(x)
+        layer = self.transformer.h[0]
+        for i in range(2):
+            x = layer(x)
         x = self.transformer.ln_f(x)
 
         if targets is not None:
