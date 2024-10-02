@@ -4,3 +4,4 @@ wandb
 .vscode
 lightning_logs
 multirun
+outputs/

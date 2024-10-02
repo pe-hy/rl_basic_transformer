@@ -7,7 +7,7 @@ import lightning as L
 import torch
 from torch.utils.data import DataLoader
 from lightning.pytorch.loggers import WandbLogger
-
+from bunch_py3 import bunchify
 #from lightning_gpt import callbacks, data
 import functools
 import warnings
@@ -92,24 +92,49 @@ def get_data(data, input_length, flag):
         dataset = data["train"]
     
     num_samples = len(dataset)
-    
     # Initialize x and y with the correct shapes
     x = torch.zeros((num_samples, input_length), dtype=torch.long)
     y = torch.zeros((num_samples, 1), dtype=torch.long)
     # Fill x and y with data
     for i, sample in enumerate(dataset):
-        #print(i, sample)
+        # print(input_length, len(sample["input"]))
         x[i] = torch.tensor(sample['input'])
-        y[i] = torch.tensor([sample['target_idx']])
+        y[i] = torch.tensor([sample["positions_extended"]['final_goal']])
     return x, y
 
 @hydra.main(version_base=None, config_path="configs", config_name="config")
 def main(cfg):
+#     cfg = {
+#     "data": {
+#         "batch_size": 64,
+#         "num_workers": 4,
+#         "dataset_path": "/mnt/raid/data/Hyner_Petr/rl/rl_basic_transformer/data_cube.pkl"
+#     },
+#     "train": {
+#         "learning_rate": 3.0e-4,
+#         "num_epochs": 35,
+#         "log_every": 100,
+#         "lr": 5.0e-4,
+#         "wdecay": 1.2e-6
+#     },
+#     "model": {
+#         "vocab_size": 577,
+#         "block_size": 70,
+#         "n_iters": 2,
+#         "n_head": 1,
+#         "n_embd": 96,
+#         "n_hidden": 16,
+#         "dropout": 0.0,
+#         "bias": True,
+#         "init_bottleneck_by_last": True
+#     }
+# }   
+#     cfg = bunchify(cfg)
     with open (cfg.data.dataset_path, "rb") as f:
         data = pickle.load(f)
     # create torch dataset for train and test
-    train_data = get_data(data, 20, False) 
-    test_data = get_data(data, 20, True)
+    train_data = get_data(data, 65, False) 
+    test_data = get_data(data, 65, True)
     # convert train data to torch dataset
 
     train_dataset = torch.utils.data.TensorDataset(train_data[0], train_data[1])
@@ -131,7 +156,7 @@ def main(cfg):
         #logger=wandb_logger,
         #devices=args.devices,
         precision=16,
-        val_check_interval=100,
+        #val_check_interval=1500,
         #checkpoint_callback=True,
         #default_root_dir="/home/p23131/rl/basic_transformer/model"
     )

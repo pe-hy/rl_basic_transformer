@@ -23,6 +23,8 @@ class RNN(nn.Module):
         self.n_head = config.n_head
         self.n_embd = config.n_embd
         self.dropout = config.dropout
+        self.m = torch.nn.Parameter(torch.Tensor(2*self.n_embd, self.n_embd, 16)) # 16 = num of modules
+
         # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0
         #self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
         #if not self.flash:
@@ -35,7 +37,45 @@ class RNN(nn.Module):
 
 
     def forward(self, x, hidden):
-        B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
+        B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd) # 16 4 32
+        x_ = x.reshape(B, C, -1, 16)
+        temp = torch.einsum('ijk,bjlk->bilk', self.m, x_)
+        q = self.q_attn(hidden).squeeze(0)
+        key_vectors = temp[:, :C, :, :]
+        att = torch.einsum("bijk,bi->bjk", key_vectors, q) * 1.0 / math.sqrt(C // self.n_head)
+        attention_probs = F.softmax(att.reshape(B, -1), dim=1)
+        value_vectors = temp[:, C:, :, :].reshape(B, C, -1)  # (32,64)
+        hidden = torch.einsum('bij,bj->bi', value_vectors, attention_probs)
+
+        # # calculate query, key, values for all heads in batch and move head forward to be the batch dim
+        # k, v  = self.c_attn(x).split(self.n_embd, dim=2)
+        # k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        # q = q.view(B, 1, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        # v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+
+        # # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
+        # #if self.flash:
+        #     # efficient attention using Flash Attention CUDA kernels
+        # #    y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)
+        # #else:
+        #     # manual implementation of attention
+        # att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+        # #att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
+        # att = F.softmax(att, dim=-1)
+        # att = self.attn_dropout(att)
+        # y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        # y = y.squeeze(1) #transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
+        # # attn_scores = torch.matmul(q, k.transpose(-1, -2)) / math.sqrt(self.n_embd)
+        # # attn_weights = F.softmax(attn_scores, dim=-1)
+        # # output projection
+        # #_,hidden = self.RNN(y, hidden)
+        # #hidden = self.resid_dropout(self.c_proj(hidden.squeeze(0))).unsqueeze(0)
+        # hidden = y.unsqueeze(0)
+        # hidden = self.resid_dropout(self.c_proj(hidden.squeeze(0))).unsqueeze(0)
+        return x, hidden
+    
+    def forwardOld(self, x, hidden):
+        B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd) # 16 4 32
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         k, v  = self.c_attn(x).split(self.n_embd, dim=2)
