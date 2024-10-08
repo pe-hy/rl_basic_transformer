@@ -96,6 +96,7 @@ def main(args):
     
     # Create a SimpleNamespace object for the model configuration
     model_config = SimpleNamespace(
+        divider = args.divider,
         vocab_size=args.vocab_size,
         block_size=args.block_size,
         n_iters=args.n_iters,
@@ -114,8 +115,8 @@ def main(args):
         learning_rate=args.learning_rate,
     )
 
-    run_name = f"ib_{args.init_bottleneck_by_last}_ni_{args.n_iters}_bls_{args.block_size}_vs_{args.vocab_size}_ne_{args.n_embd}_nh_{args.n_hidden}_bs_{args.batch_size}"
-    wandb_logger = WandbLogger(project="rl_transformer_two_modules", name=run_name, save_dir="wandb_saves")
+    run_name = f"ib_{args.init_bottleneck_by_last}_ni_{args.n_iters}_divider_{args.divider}_vs_{args.vocab_size}_ne_{args.n_embd}_nh_{args.n_hidden}_bs_{args.batch_size}_bls_{args.block_size}"
+    wandb_logger = WandbLogger(project="rl_transformer_divider", name=run_name, save_dir="wandb_saves")
 
     trainer = L.Trainer.from_argparse_args(
         args,
@@ -147,8 +148,8 @@ if __name__ == "__main__":
     parser.add_argument("--n_embd", type=int, default=96)
     parser.add_argument("--n_hidden", type=int, default=16)
     parser.add_argument("--init_bottleneck_by_last", type=str, default='True')
-
-    parser.add_argument("--datapath", type=str, required=True)
+    parser.add_argument("--divider", type=int, default=5)
+    parser.add_argument("--datapath", type=str, default="/mnt/raid/data/Hyner_Petr/rl/rl_basic_transformer/Data/new_data_only_triples_nn_old.pkl")
 
     # Unchanging
     parser.add_argument("--num_epochs", type=int, default=200)

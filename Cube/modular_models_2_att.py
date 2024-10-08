@@ -13,10 +13,14 @@ class RNN(nn.Module):
         super().__init__()
         assert config.n_embd % config.n_head == 0
         # key, query, value projections for all heads, but in a batch
-        self.c_attn_1 = nn.Linear(config.n_embd, 2 * config.n_embd, bias=config.bias)
-        self.c_attn_2 = nn.Linear(config.n_embd, 2 * config.n_embd, bias=config.bias)
-        self.q_attn_1 = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
-        self.q_attn_2 = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
+        self.divider = config.divider
+        self.c_attn_dic = {}
+        self.q_attn_dic = {}
+        for i in range(self.divider):
+            self.c_attn_dic[i] = nn.Linear(config.n_embd, 2 * config.n_embd, bias=config.bias)
+            self.register_module(f"c_attn{i}", self.c_attn_dic[i])
+            self.q_attn_dic[i] = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
+            self.register_module(f"q_attn{i}", self.q_attn_dic[i])
         # output projection
         self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
         # regularization
@@ -38,21 +42,24 @@ class RNN(nn.Module):
 
     def forward(self, x, hidden):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
-        x_1, x_2 = x[:, :T//2, :], x[:, T//2:, :]
-
-        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        k_1, v_1  = self.c_attn_1(x_1).split(self.n_embd, dim=2)
-        k_2, v_2  = self.c_attn_2(x_2).split(self.n_embd, dim=2)
+        divider = self.divider
+        num_of_xs = T//divider
+        assert T % divider == 0
+        v_s = []
+        atts = []
+        for i in range(divider):
+            c_x = x[:, i*num_of_xs:i*num_of_xs+num_of_xs, :]
+            c_k, c_v = self.c_attn_dic[i](c_x).split(self.n_embd, dim=2)
+            c_q = self.q_attn_dic[i](hidden)
+            c_k = c_k.view(B, T//divider, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+            c_q = c_q.view(B, 1, self.n_head, C // self.n_head).transpose(1, 2)
+            att = (c_q @ c_k.transpose(-2, -1)) * (1.0 / math.sqrt(c_k.size(-1)))
+            v_s.append(c_v)
+            atts.append(att)
 
         #k = torch.cat([k_1, k_2], dim=1)
-        v = torch.cat([v_1, v_2], dim=1)
+        v = torch.cat(v_s, dim=1)
 
-        q_1 = self.q_attn_1(hidden)
-        q_2 = self.q_attn_2(hidden)
-        k_1 = k_1.view(B, T//2, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        k_2 = k_2.view(B, T//2, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        q_1 = q_1.view(B, 1, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        q_2 = q_2.view(B, 1, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
@@ -61,9 +68,7 @@ class RNN(nn.Module):
         #    y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)
         #else:
             # manual implementation of attention
-        att_1 = (q_1 @ k_1.transpose(-2, -1)) * (1.0 / math.sqrt(k_1.size(-1)))
-        att_2 = (q_2 @ k_2.transpose(-2, -1)) * (1.0 / math.sqrt(k_2.size(-1)))
-        att = torch.cat([att_1, att_2], dim=-1)
+        att = torch.cat(atts, dim=-1)
         #att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
         att = F.softmax(att, dim=-1)
         att = self.attn_dropout(att)
