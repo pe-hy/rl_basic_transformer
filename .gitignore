@@ -2,6 +2,8 @@ data
 __pycache__
 wandb
 .vscode
-lightning_logs
-multirun
+lightning_logs/
+multirun/
 outputs/
+Cube/wandb_saves/
+unused/=4.2.0

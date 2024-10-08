@@ -13,7 +13,7 @@ from tqdm import tqdm
 # %%
 import torch
 from lightning import LightningModule
-from models import GPT, GPTConfig, CausalSelfAttention
+from rl_basic_transformer.NN.models import GPT, GPTConfig, CausalSelfAttention
 import wandb
 import matplotlib.pyplot as plt
 import seaborn as sns
