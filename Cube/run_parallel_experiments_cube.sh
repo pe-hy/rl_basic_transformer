@@ -1,0 +1,2 @@
+source activate rl
+CUDA_VISIBLE_DEVICES=2 parallel python train.py --batch_size 512 --vocab_size 577 --block_size 65 --n_embd 512 --n_hidden 64 --datapath /mnt/raid/data/Hyner_Petr/rl/rl_basic_transformer/Data/data_cube.pkl --n_iters {1} --init_bottleneck_by_last {2} --divider {3} ::: 2 ::: True ::: 8

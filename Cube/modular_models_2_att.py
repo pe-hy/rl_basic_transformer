@@ -139,7 +139,7 @@ class ModularGPT(nn.Module):
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
         x = tok_emb + pos_emb
         if self.init_bottleneck_by_last:
-            # x = x[:, :-1, :] # remove the last token
+            x = x[:, :-1, :] # remove the last token
             hidden = tok_emb[:, -1, :].unsqueeze(0) # initial hidden state
         # for block in self.transformer.h: # experiment
         #     x = block(x)

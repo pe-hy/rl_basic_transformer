@@ -74,7 +74,7 @@ def get_data(data, input_length, flag):
     y = torch.zeros((num_samples, 1), dtype=torch.long)
     for i, sample in enumerate(dataset):
         x[i] = torch.tensor(sample['input'])
-        y[i] = torch.tensor([sample['target_idx']])
+        y[i] = torch.tensor([sample["positions_extended"]['final_goal']])
     return x, y
 
 
@@ -85,8 +85,8 @@ def main(args):
     with open(args.datapath, "rb") as f:
         data = pickle.load(f)
 
-    train_data = get_data(data, 20, False) 
-    test_data = get_data(data, 20, True)
+    train_data = get_data(data, 65, False) 
+    test_data = get_data(data, 65, True)
 
     train_dataset = TensorDataset(train_data[0], train_data[1])
     test_dataset = TensorDataset(test_data[0], test_data[1])
@@ -116,7 +116,7 @@ def main(args):
     )
 
     run_name = f"ib_{args.init_bottleneck_by_last}_ni_{args.n_iters}_divider_{args.divider}_vs_{args.vocab_size}_ne_{args.n_embd}_nh_{args.n_hidden}_bs_{args.batch_size}_bls_{args.block_size}"
-    wandb_logger = WandbLogger(project="rl_transformer_divider", name=run_name, save_dir="wandb_saves")
+    wandb_logger = WandbLogger(project="rl_transformer_divider_cube", name=run_name, save_dir="wandb_saves")
 
     trainer = L.Trainer.from_argparse_args(
         args,
@@ -152,12 +152,12 @@ if __name__ == "__main__":
     parser.add_argument("--datapath", type=str, default="/mnt/raid/data/Hyner_Petr/rl/rl_basic_transformer/Data/new_data_only_triples_nn_old.pkl")
 
     # Unchanging
-    parser.add_argument("--num_epochs", type=int, default=200)
-    parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--num_epochs", type=int, default=2000)
+    parser.add_argument("--num_workers", type=int, default=16)
     parser.add_argument("--n_head", type=int, default=1)
     parser.add_argument("--dropout", type=float, default=0.0)
     parser.add_argument("--bias", type=bool, default=True)
-    parser.add_argument("--learning_rate", default=3e-4, type=float)
+    parser.add_argument("--learning_rate", default=3e-5, type=float)
     parser.add_argument("--wdecay", default=1.2e-6, type=float)
 
     # Old
