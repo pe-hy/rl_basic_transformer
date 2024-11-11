@@ -7,3 +7,4 @@ multirun/
 outputs/
 Cube/wandb_saves/
 unused/=4.2.0
+temp/
