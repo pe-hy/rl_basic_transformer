@@ -15,8 +15,7 @@ def dfs(target, nums, heuristic=sum_heuristic, threshold=None, search_trace=[], 
         open_set.sort(key=lambda x: -x[0])
         _, current_node = open_set.pop()
         string_trace += f"Current State: {target}:{current_node.nums}, Operations: {current_node.operations}\n"
-        # curr_trace["current_state"] = {"target":target, "current_node_nums":current_node.nums}
-        # curr_trace["operations"] = current_node.operations
+        
         search_trace.append({"current_state":
                                 {"target":target,
                                  "current_node_numbers":current_node.nums,
@@ -47,51 +46,43 @@ def dfs(target, nums, heuristic=sum_heuristic, threshold=None, search_trace=[], 
         for g, (_, new_node) in enumerate(generated_nodes):
             new_node.idx = f"{new_node.parent.idx},{node_index}"
             string_trace += f"Exploring Operation: {new_node.operations[-1]}, Resulting Numbers: {new_node.nums}\n"
-            # curr_trace["exploring_operation"] = new_node.operations[-1]
-            # curr_trace["resulting_numbers"] = new_node.nums
+            
             search_trace.append({"exploring_operation":tuple(new_node.operations[-1]),
                                  "resulting_numbers":new_node.nums})
             if len(new_node.nums) == 1 and new_node.nums[0] == target:
                 string_trace += f"{new_node.nums[0]},{target} equal: Goal Reached\n"
-                # curr_trace["goal_reached"] = True
-                # curr_trace["nums"] = (new_node.nums[0], target)
+                
                 search_trace.append({"goal_reached":True,
                                      "numbers":(new_node.nums[0], target)})
 
                 return search_trace, string_trace
             elif len(new_node.nums) == 1:
                 string_trace += f"{new_node.nums[0]},{target} unequal: No Solution\n"
-                # curr_trace["goal_reached"] = False
-                # curr_trace["nums"] = (new_node.nums[0], target)
+               
                 search_trace.append({"dead_end":True,
                                      "numbers":(new_node.nums[0], target)})
             else:
                 string_trace += f"Generated Node #{new_node.idx}: {target}:{new_node.nums} Operation: {new_node.operations[-1]}\n"
-                # curr_trace["generated_node"] = new_node.idx
-                # curr_trace["target"] = target
-                # curr_trace["new_node_nums"] = new_node.nums
-                # curr_trace["operations"] = new_node.operations[-1]
+                
                 search_trace.append({"generated_node":new_node.idx,
                                      "target":target,
                                      "new_node_numbers":new_node.nums,
                                      "operations":[tuple(item) for item in new_node.operations[-1]]})
                 new_set = [(new_heuristic, new_node)]
                 string_trace += f"Moving to Node #{new_node.idx}\n"
-                # curr_trace["moving_to_node"] = new_node.idx
+                
                 search_trace.append({"moving_to_node":tuple(str(new_node.idx).split(","))})
                 
                 search_trace, string_trace = dfs(target, nums, heuristic=heuristic, threshold=threshold, search_trace=search_trace, string_trace=string_trace, open_set=new_set)
                 if "goal_reached" in search_trace:
-                    # search_trace.append(curr_trace)
+                    
                     return search_trace, string_trace
             node_index += 1
             if g < len(generated_nodes) - 1:
                 next_index = new_node.parent.idx
                 string_trace += f"Moving to Node #{next_index}\n"
                 string_trace += f"Current State: {target}:{new_node.parent.nums}, Operations: {new_node.parent.operations}\n"
-                # curr_trace["moving_to_node"] = next_index
-                # curr_trace["current_state"] = {"target":target, "new_node_nums":new_node.parent.nums}
-                # curr_trace["operations"] = new_node.parent.operations
+                
                 search_trace.append({"moving_to_node":tuple(str(next_index).split(","))})
                 search_trace.append({"current_state":
                                         {"target":target,
@@ -103,11 +94,9 @@ def dfs(target, nums, heuristic=sum_heuristic, threshold=None, search_trace=[], 
         if open_set:  # If there are still nodes to explore
             next_node = open_set[-1][1]  # Get the index of the next node to be explored
             next_index = next_node.idx
-            # curr_trace["moving_to_node"] = next_index
+            
             string_trace += f"Moving to Node #{next_index}\n"
             search_trace.append({"moving_to_node":tuple(str(next_index).split(","))})
-
-    # search_trace.append(curr_trace)
 
     return search_trace, string_trace
 
@@ -119,8 +108,10 @@ if __name__ == "__main__":
     search_path, string_trace = dfs(target, nums, heuristic=mult_heuristic, threshold=target)
     json_data = json.dumps(search_path, indent=4)
     print(json_data)
+
     with open("stream_of_search.pkl", "wb") as file:
         pickle.dump(search_path, file)
+        
     # print(string_trace)
     # print(search_path)
     # print(len(search_path))
