@@ -16,7 +16,6 @@ blessed==1.20.0
 boto3==1.34.138
 botocore==1.34.138
 certifi==2024.6.2
-charset-normalizer==2.0.4
 charset-normalizer==3.1.0
 click==8.1.7
 croniter==1.3.15
