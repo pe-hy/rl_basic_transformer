@@ -113,7 +113,7 @@ if __name__ == "__main__":
 
             else:
                 raise ValueError(f"Search type {args.search} not supported")
-            if "Goal Reached" in search_path:
+            if "O" in search_path:
                 rating = 1. - simple_rating(search_path) / max_rating
                 rating = max(0., rating)
             else:
@@ -121,7 +121,7 @@ if __name__ == "__main__":
             if rating == 0.:
                 zero_count += 1
 
-            search_type = search.__name__
+            search_type = args.search
             if search_type == "bfs":
                 search_type += f"_{beam_size}"
 
@@ -133,7 +133,7 @@ if __name__ == "__main__":
                 "rating": rating,
                 "search_type": search_type,
                 "optimal_path": no_backtrack_trace,
-                "heuristic": heuristic.__name__
+                "heuristic": None
             })
             enc = tiktoken.get_encoding("cl100k_base")
             tokens = enc.encode(search_path)
