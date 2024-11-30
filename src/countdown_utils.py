@@ -56,7 +56,8 @@ def mult_prune(result, target):
 
 def simple_rating(search_path):
     # Simple rating function based on number of operations
-    nodes_explored = search_path.count("Exploring Operation") + 1
+    # nodes_explored = search_path.count("Exploring Operation") + 1
+    nodes_explored = search_path.count("E") + 1
     return nodes_explored
 
 
@@ -77,65 +78,70 @@ def get_target_nums(search_path, mode=""):
 def parse_trajectory(search_path, mode="dt"):
     # Extracting the target and initial numbers from the first line
     first_line = search_path.strip().split('\n')[0]
-    search_path = search_path.replace("<|endoftext|>", "")
-
+    # search_path = search_path.replace("<|endoftext|>", "") TODO
+    search_path = search_path.replace("[EOS]", "")
     # if mode == "dt":
     #     first_line = first_line.split("->")[1]
-    target_nums_match = re.match(r"Current State: (\d+):\[(.*?)\]", first_line)
+    # target_nums_match = re.match(r"Current State: (\d+):\[(.*?)\]", first_line) TODO
+    target_nums_match = re.match(r"S\s+(\d+)\s+\[\s+(\d+(?:\s+\d+)*)\s+\]", first_line)
     if not target_nums_match:
         return "Invalid input: Cannot find the initial state in the first line."
 
-    target, nums = int(target_nums_match.group(1)), [int(n) for n in target_nums_match.group(2).split(", ")]
+    target, nums = int(target_nums_match.group(1)), [int(n) for n in target_nums_match.group(2).split(" ")]
 
     # Extract the operations from the line that claims the goal is reached.
-    goal_lines = re.finditer(r"\d+,\d+ equal: Goal Reached", search_path)
+    # goal_lines = re.finditer(r"\d+,\d+ equal: Goal Reached", search_path) TODO
+    goal_lines = re.finditer(r"O \d+ \d+ .", search_path)
     goal_lines = list(goal_lines)
     if not goal_lines:
         return "No goal reached statement found."
 
     goal_line = goal_lines[0]
     # get the last operation line before the goal reached statement
-    operations = re.findall(r"Exploring Operation: (.*?=\d+), Resulting Numbers: \[(.*?)\]",
+    # operations = re.findall(r"Exploring Operation: (.*?=\d+), Resulting Numbers: \[(.*?)\]",
+    #                         search_path[:goal_line.start()]) TODO
+    operations = re.findall(r"E (\d+\s*.\s*\d+\s*=\s*\d+)",
                             search_path[:goal_line.start()])
     if not operations:
         return "No operations found leading to the goal."
 
-    final_operation = operations[-1][0]
+    # final_operation = operations[-1][0] TODO
+    final_operation = operations[-1]
     try:
-        predicted_result = int(final_operation.split('=')[1])
+        predicted_result = int(final_operation.split('= ')[1].strip())
     except:
         print("couldnt parse last op", final_operation)
         return "Couldnt parse last op"
     if predicted_result != target:
         return "Invalid path: Final operation does not result in target."
 
-    # get the last current state, operations before the goal reached statement, and extract the operations
-    operation_list = re.findall(r"Current State: \d+:\[.*?\], Operations: \[(.*?)\]", search_path[:goal_line.start()])[
-        -1].split(', ')
-    operation_list = [op.replace("'", "") for op in operation_list]
-    operation_list += [final_operation]
+    # # get the last current state, operations before the goal reached statement, and extract the operations
+    # operation_list = re.findall(r"Current State: \d+:\[.*?\], Operations: \[(.*?)\]", search_path[:goal_line.start()])[
+    #     -1].split(', ')
+    # operation_list = [op.replace("'", "") for op in operation_list]
+    # operation_list += [final_operation]
 
-    # Verify each operation and keep track of the numbers involved
-    available_numbers = nums
-    for operation in operation_list:
-        # Verify the operation
-        try:
-            left, right = operation.split('=')
-        except:
-            return f"Could not split operation into lhs, rhs"
-        try:
-            if eval(left) != int(right):
-                return f"Invalid operation: {operation}"
-        except Exception as e:
-            return f"Error in evaluating operation {operation}: {e}"
-        # get the numbers involved
-        used_numbers = re.findall(r"\d+", left)
-        for n in used_numbers:
-            if int(n) not in available_numbers:
-                return f"Invalid operation: {operation}, number {n} not available in {available_numbers}"
+    # # Verify each operation and keep track of the numbers involved
+    # available_numbers = nums
+    # for operation in operation_list:
+    #     # Verify the operation
+    #     try:
+    #         left, right = operation.split('=')
+    #     except:
+    #         return f"Could not split operation into lhs, rhs"
+    #     try:
+    #         if eval(left) != int(right):
+    #             return f"Invalid operation: {operation}"
+    #     except Exception as e:
+    #         return f"Error in evaluating operation {operation}: {e}"
+    #     # get the numbers involved
+    #     used_numbers = re.findall(r"\d+", left)
+    #     for n in used_numbers:
+    #         if int(n) not in available_numbers:
+    #             return f"Invalid operation: {operation}, number {n} not available in {available_numbers}"
 
-        available_numbers = [n for n in available_numbers if n not in used_numbers]
-        available_numbers.append(int(right))
+    #     available_numbers = [n for n in available_numbers if n not in used_numbers]
+    #     available_numbers.append(int(right))
 
     return "Valid path."
 
@@ -145,10 +151,11 @@ def metric_fn(search_path, mode="dt"):
     if rating == "Valid path.":
         score = simple_rating(search_path)
         first_line = search_path.strip().split('\n')[0]
-        if "->" in first_line:
-            first_line = first_line.split("->")[1]
-        target_nums_match = re.match(r"Current State: (\d+):\[(.*?)\]", first_line)
-        target, nums = int(target_nums_match.group(1)), [int(n) for n in target_nums_match.group(2).split(", ")]
+        # if "->" in first_line:
+        #     first_line = first_line.split("->")[1]
+        target_nums_match = re.match(r"S\s+(\d+)\s+\[\s+(\d+(?:\s+\d+)*)\s+\]", first_line)
+        # target_nums_match = re.match(r"Current State: (\d+):\[(.*?)\]", first_line) TODO
+        target, nums = int(target_nums_match.group(1)), [int(n) for n in target_nums_match.group(2).split(" ")]
         if len(nums) == 2:
             # 2c2 x ops (4) = 4
             max_nodes = 4
