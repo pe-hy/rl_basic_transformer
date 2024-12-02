@@ -20,7 +20,8 @@ def bfs(target, nums, beam_size, heuristic=sum_heuristic):
             break  # Exit if no nodes are left to expand
 
         for idx, (_, current_node) in enumerate(current_nodes):
-            search_trace += f"Current State: {target}:{current_node.nums}, Operations: {current_node.operations}\n"
+            nums = str(current_node.nums).replace(",", "").replace("[", "").replace("]", "")
+            search_trace += f"S {target} [ {nums} ] , "
             # Store nodes generated at this level for pruning
             generated_nodes = []
             # Generate successors for each node
@@ -45,16 +46,18 @@ def bfs(target, nums, beam_size, heuristic=sum_heuristic):
             for node_tuple in generated_nodes:
                 node = node_tuple[-1]
                 node.idx = f"{node.parent.idx},{node_idx}"
-                operation = node.operations[-1]
-                nums = node.nums
-                search_trace += f"Exploring Operation: {operation}, Resulting Numbers: {nums}\n"
+                operations = str(node.operations[-1]).replace("*", " * ").replace("/", " / ").replace("+", " + ").replace("-", " - ").replace("=", " = ")
+                nums = str(node.nums).replace(",", "").replace("[", "").replace("]", "")
+                search_trace += f"E {operations} R [ {nums} ] , "
                 if len(node.nums) == 1 and node.nums[0] == target:
-                    search_trace += f"{node.nums[0]},{target} equal: Goal Reached\n"
+                    search_trace += f"O {node.nums[0]} {target} ."
                     return search_trace
                 elif len(new_node.nums) == 1:
-                    search_trace += f"{node.nums[0]},{target} unequal: No Solution\n"
+                    search_trace += f"N {node.nums[0]} {target} ; "
                 else:
-                    search_trace += f"Generated Node #{node.idx}: {target}:{node.nums} Operation: {operation}\n"
+                    nd = str(node.idx).replace(",", "")
+                    nums = str(node.nums).replace(",", "").replace("[", "").replace("]", "")
+                    search_trace += f"G #{nd} {target} [ {nums} ] , "
                     node_idx += 1
             generated_nodes.sort()
             for node_tuple in generated_nodes:
@@ -63,8 +66,8 @@ def bfs(target, nums, beam_size, heuristic=sum_heuristic):
             # Note transition to the next node within the current set
             if idx < len(current_nodes) - 1:
                 _, next_node = current_nodes[idx + 1]
-                next_index = next_node.idx
-                search_trace += f"Moving to Node #{next_index}\n"
+                nd = str(next_node.idx).replace(",", "")
+                search_trace += f"M #{nd} , "
             
 
         # Backtracking trace
@@ -74,9 +77,10 @@ def bfs(target, nums, beam_size, heuristic=sum_heuristic):
             if next_node_to_explore:
                 _, next_node = next_node_to_explore
                 next_index = next_node.idx
-                search_trace += f"Moving to Node #{next_index}\n"
+                nd = str(next_index).replace(",", "")
+                search_trace += f"M #{nd} , "
 
-    search_trace += "No solution found."
+    search_trace += f"N ; "
     return search_trace
 
 if __name__ == "__main__":

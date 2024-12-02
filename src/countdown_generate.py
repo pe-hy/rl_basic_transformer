@@ -101,7 +101,8 @@ if __name__ == "__main__":
             elif args.search == "dfs":
                 search_path = dfs(target, nums, heuristic=sum_heuristic, threshold=target)
             elif args.search == "bfs":
-                search_path = bfs(target, nums, 5, heuristic=mult_heuristic)
+                beam_size = 5
+                search_path = bfs(target, nums, beam_size, heuristic=mult_heuristic)
             elif args.search == "random":
                 heuristic = random.choice([sum_heuristic, mult_heuristic])
                 search = random.choice([dfs, bfs])
