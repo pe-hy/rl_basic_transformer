@@ -5,18 +5,18 @@ data:
   val_target_file: sos/val_target1_b4_t30_n200000_dfs.json
   val_file: sos/val1_b4_t30_n200000_dfs.json
   tokenizer_path: data/sos/tokenizer.json
-  num_train: 2e1
+  num_train: 2e5
   num_workers: 4
 
 model:
   model_name: "GPT2"
-  n_layers: 1
-  n_heads: 1
+  n_layers: 16
+  n_heads: 16
   n_embed: 768
   dropout: 0.1
   n_hidden: 1024
   block_size: 4096
-  vocab_size: 400
+  vocab_size: 410
   bias: True
 
 train:

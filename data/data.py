@@ -58,7 +58,6 @@ class Datamodule(LightningDataModule):
                           collate_fn=self.collate_fn_pad)
 
 def get_data(cfg: DictConfig, tokenizer):
-
     train_file = to_absolute_path(os.path.join(cfg.data.datapath, cfg.data.train_file))
     val_file = to_absolute_path(os.path.join(cfg.data.datapath, cfg.data.val_file))
     # val_target_file = os.path.join(data.data_dir, data.val_target_file)

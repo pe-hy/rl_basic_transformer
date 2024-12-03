@@ -20,7 +20,7 @@ def get_tokenizer(vocab, cfg):
     tokenizer = Tokenizer(WordLevel(vocab, unk_token="[UNK]"))
     tokenizer.pre_tokenizer=WhitespaceSplit()
     tokenizer.add_special_tokens(['[BOS]', '[PAD]','[MASK]','[UNK]', '[EOS]'])
-    tokenizer.save(cfg.data.specific_datapath + "tokenizer.json")
+    tokenizer.save(cfg.data.datapath + "/" + cfg.data.specific_datapath + "tokenizer.json")
     print("tokenizer saved to:", cfg.data.specific_datapath + "tokenizer.json")
     # tokenizer = PreTrainedTokenizerFast(tokenizer_file=f"data/tokenizer.json")
     # tokenizer.eos_token = "[SEP]"
@@ -30,13 +30,13 @@ def get_tokenizer(vocab, cfg):
     return tokenizer
 
 def get_vocab(cfg: DictConfig):
-    with open (cfg.data.train_file, "rb") as f:
+    with open (cfg.data.datapath + "/" + cfg.data.train_file, "rb") as f:
         train = json.load(f)
 
-    with open (cfg.data.val_file, "rb") as f:
+    with open (cfg.data.datapath + "/" + cfg.data.val_file, "rb") as f:
         val = json.load(f)
 
-    with open (cfg.data.val_target_file, "rb") as f:
+    with open (cfg.data.datapath + "/" + cfg.data.val_target_file, "rb") as f:
         val_target = json.load(f)
 
     data = train + val + val_target
