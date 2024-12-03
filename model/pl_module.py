@@ -3,7 +3,7 @@ import torch
 from typing import Optional
 import torch.optim
 from lightning import LightningModule
-from models.models import GPT
+from model.gpt2 import GPT
 from omegaconf import DictConfig
 
 class Pl_model_wrapper(LightningModule):
@@ -40,13 +40,13 @@ class Pl_model_wrapper(LightningModule):
         }
     
     def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
-        idx, targets = batch
+        idx, targets, att_mask = batch["input_ids"], batch["labels"], batch["attention_mask"]
         _, loss = self(idx, targets)
         self.log("train_loss", loss)
         return loss
     
     def validation_step(self, batch, batch_idx):
-        idx, targets = batch
+        idx, targets, att_mask = batch["input_ids"], batch["labels"], batch["attention_mask"]
         logits, loss = self(idx, targets)
         #accuracy = self.calculate_accuracy(logits, targets)
         self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)

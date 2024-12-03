@@ -1,18 +1,25 @@
 import pickle
 import torch
+import os
 from torch.utils.data import DataLoader, Dataset
 from lightning import LightningDataModule
-
+from transformers import DataCollatorForLanguageModeling
 from torch.nn.utils.rnn import pad_sequence
-
+from datasets import load_dataset
 from omegaconf import DictConfig, OmegaConf
+from transformers import PreTrainedTokenizerFast
+from hydra.utils import get_original_cwd, to_absolute_path
+
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 class Datamodule(LightningDataModule):
-    def __init__(self, datasets, batch_size, num_workers):
+    def __init__(self, dataset, batch_size, num_workers, tokenizer):
         super(Datamodule, self).__init__()
-        self.datasets = datasets
+        self.dataset = dataset
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.collate_fn_pad = DataCollatorForLanguageModeling(tokenizer, mlm=False)
 
     def setup(self, stage=None):
         self.train_dataset = self.dataset['train']
@@ -50,49 +57,53 @@ class Datamodule(LightningDataModule):
                           drop_last=False,
                           collate_fn=self.collate_fn_pad)
 
+def get_data(cfg: DictConfig, tokenizer):
 
+    train_file = to_absolute_path(os.path.join(cfg.data.datapath, cfg.data.train_file))
+    val_file = to_absolute_path(os.path.join(cfg.data.datapath, cfg.data.val_file))
+    # val_target_file = os.path.join(data.data_dir, data.val_target_file)
 
+    hf_dataset = load_dataset(
+    "json",
+        data_files={
+            "train": train_file,
+            "val": val_file,
+            "test": val_file,
+        },
+    )
 
-class SequenceDataset(Dataset):
+    hf_dataset["train"] = hf_dataset["train"].select(range(int(cfg.data["num_train"])))
 
-    def __init__(self, filepath, add_one_token=True,test=False):
-        #data = np.load(filepath, allow_pickle=True)
-        data = filepath
-        target_key = 'key'
-        self.inputs = [list(x['input']) for x in data] #if len(x['input']) == 14]  # Loading the sequences as lists
-        self.enabling = [x['enabling'] for x in data]
-        self.subgoal = [x['subgoal'] for x in data]
-        self.prev_enabling = [x['prev_enabling'] for x in data]
-        self.prev_subgoal = [x['prev_subgoal'] for x in data]
-        self.prev_start = [x['prev_start'] for x in data]
-        self.prev_prev_enabling = [x['prev_prev_enabling'] for x in data]
-        if test:
-            max_size = max(5000,len(self.inputs))
-            self.inputs = self.inputs[:max_size]
-            self.enabling = self.enabling[:max_size]
-            self.subgoal = self.subgoal[:max_size]
-            self.prev_enabling = self.prev_enabling[:max_size]
-            self.prev_subgoal = self.prev_subgoal[:max_size]
-            self.prev_start = self.prev_start[:max_size]
-            self.prev_prev_enabling = self.prev_prev_enabling[:max_size]
-        self.add_one_token = add_one_token
+    def tokenize(element):
+        text = [
+            tokenizer.bos_token
+            + element["search_path"][e].strip()
+            + tokenizer.eos_token
+            for e in range(len(element["search_path"]))
+        ]
+        outputs = tokenizer(
+            text,
+            truncation=True,
+            max_length=cfg.model.block_size,
+            return_overflowing_tokens=True,
+            return_length=True,
+            stride=0,
+            padding="max_length",
+        )
+        return {"input_ids": outputs["input_ids"]}
 
-    def __len__(self):
-        return len(self.inputs)
+    tokenized_dataset = hf_dataset.map(
+        tokenize, batched=True, remove_columns=hf_dataset["train"].column_names
+        )   
 
-    def __getitem__(self, idx):
-        # y is 1-index shifted version of x. Everything should be integer for tokenizer.
-        start = 0
-        x = self.inputs[idx][start:]
-        y = [self.prev_prev_enabling[idx],self.prev_enabling[idx],self.enabling[idx],self.subgoal[idx],self.prev_start[idx],self.prev_subgoal[idx]]  
-        return torch.tensor(x, dtype=torch.int64), torch.tensor(y, dtype=torch.int64)
+    return tokenized_dataset
 
-
-def get_data(data: DictConfig):
-    with open(data.datapath, "rb") as f:
-        data = pickle.load(f)
-    train_dataset = SequenceDataset(data['train'], add_one_token=True)
-    test_dataset = SequenceDataset(data['test'], add_one_token=True,test=True)
-    return {'train':train_dataset, 
-            'test':test_dataset, 
-            'val':test_dataset}
+def get_tokenizer(data: DictConfig):
+    tokenizer = PreTrainedTokenizerFast(tokenizer_file=to_absolute_path(data.tokenizer_path))
+    tokenizer.eos_token = "[EOS]"
+    tokenizer.unk_token = "[UNK]"   
+    tokenizer.pad_token = "[PAD]"
+    tokenizer.mask_token = "[MASK]"
+    tokenizer.bos_token = "[BOS]"
+    tokenizer.pad_token = tokenizer.eos_token
+    return tokenizer

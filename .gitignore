@@ -1,4 +1,4 @@
-Data/
+data/*
 __pycache__
 wandb
 .vscode

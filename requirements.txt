@@ -1,7 +1,10 @@
+datasets
+transformers
+lightning
+hydra-core
 Brotli==1.0.9
 GitPython==3.1.43
 Jinja2==3.1.4
-MarkupSafe==2.1.3
 MarkupSafe==2.1.5
 PyJWT==2.8.0
 PySocks==1.7.1
@@ -17,7 +20,6 @@ blessed==1.20.0
 boto3==1.34.138
 botocore==1.34.138
 certifi==2024.6.2
-charset-normalizer==2.0.4
 charset-normalizer==3.1.0
 click==8.1.7
 croniter==1.3.15
@@ -26,12 +28,10 @@ deepdiff==7.0.1
 docker-pycreds==0.4.0
 editor==1.6.6
 fastapi==0.88.0
-filelock==3.13.1
 filelock==3.15.4
 frozenlist==1.4.1
 fsspec==2023.12.2
 gitdb==4.0.11
-gmpy2==2.1.2
 h11==0.14.0
 idna==3.7
 inquirer==3.3.0
@@ -44,13 +44,11 @@ markdown-it-py==3.0.0
 mdurl==0.1.2
 mkl-fft==1.3.8
 mkl-random==1.2.4
-mkl-service==2.4.0
+mkl-service==2.4.2
 mpmath==1.3.0
 multidict==6.0.5
-networkx==3.2.1
 networkx==3.3
-numpy==1.26.4
-numpy==2.0.0
+numpy==1.26.*
 nvidia-cublas-cu12==12.1.3.1
 nvidia-cuda-cupti-cu12==12.1.105
 nvidia-cuda-nvrtc-cu12==12.1.105
@@ -75,7 +73,6 @@ python-dateutil==2.9.0.post0
 python-multipart==0.0.9
 pytz==2024.1
 readchar==4.1.0
-requests==2.32.2
 requests==2.32.3
 rich==13.7.1
 runs==1.2.2
@@ -89,9 +86,7 @@ sniffio==1.3.1
 soupsieve==2.5
 starlette==0.22.0
 starsessions==1.3.0
-sympy==1.12
 sympy==1.12.1
-torch==2.3.1
 torch==2.3.1
 torchaudio==2.3.1
 torchmetrics==1.4.0.post0
@@ -99,9 +94,7 @@ torchvision==0.18.1
 tqdm==4.66.4
 traitlets==5.14.3
 triton==2.3.1
-triton==2.3.1
 types-python-dateutil==2.9.0.20240316
-typing_extensions==4.11.0
 typing_extensions==4.12.2
 urllib3==2.2.2
 uvicorn==0.30.1
