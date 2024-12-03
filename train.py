@@ -28,7 +28,7 @@ def main(cfg: DictConfig):
     
     trainer = Trainer(max_epochs=cfg.train.max_epochs, 
                          logger=logger,
-                         accelerator="gpu", devices=1,
+                         accelerator="gpu", devices=4, num_nodes=1, strategy="ddp", accumulate_grad_batches=2,
                          gradient_clip_val=cfg.train.grad_clip,
                          precision="bf16")
     
