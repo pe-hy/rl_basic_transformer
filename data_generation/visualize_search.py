@@ -15,7 +15,6 @@ class Visualize_search():
     def __init__(self, graphs, steps, numbers):
         self.graphs = graphs
         self.steps = steps
-        print(len(self.steps))
 
         self.graphs_number = len(graphs)
         self.colors = [np.random.rand(3,) for _ in range(self.graphs_number)]
@@ -30,7 +29,11 @@ class Visualize_search():
         'highlighted_states': 
             lambda step, automaton_idx, graph, pos, ax: self.__highlight_state(step, automaton_idx, graph, pos, ax),
         'edge_conditions_visualize': 
-            lambda step, automaton_idx, graph, pos, ax: self.__visualize_edge_conditions(step, automaton_idx, graph, pos, ax)
+            lambda step, automaton_idx, graph, pos, ax: self.__visualize_edge_conditions(step, automaton_idx, graph, pos, ax),
+        'current':
+            lambda step, automaton_idx, graph, pos, ax: self.__visualize_current_state(step, automaton_idx, graph, pos, ax),
+        'target':
+            lambda step, automaton_idx, graph, pos, ax: self.__visualize_target(step, automaton_idx, graph, pos, ax)
         }
 
         for graph_idx in range(self.graphs_number):
@@ -46,7 +49,6 @@ class Visualize_search():
     # Function to update the frame
     def __update(self, frame):
         current_step = self.steps[frame]
-        print(current_step)
         # current_goal = current_step['goal']
         # target_state = current_goal['target_state']
         # target_automaton = current_goal['target_automaton']
@@ -74,8 +76,9 @@ class Visualize_search():
                     node_color=self.colors[i], node_size=300,
                     font_size=8, font_weight='bold')
             
-            # for item in current_step['visualize']:
-            #     self.visualize_dict[item](current_step, i, G, pos, ax)
+            for item in current_step:
+                if item in self.visualize_dict:
+                    self.visualize_dict[item](current_step, i, G, pos, ax)
 
             #ax.set_title(f'Random Graph {i+1}')
 
@@ -99,6 +102,10 @@ class Visualize_search():
                         cellLoc='center',
                         loc='center',
                         bbox=[0.2*target_automaton, 0.6, 0.2, 0.5]) # prvni souradnice ovlivnuje umisteni vrchni bunky
+        
+        # add text with current step number
+        ax.text(0.5, -0.5, f'Step: {frame+1}', transform=ax.transAxes,
+                fontsize=40, ha='center', va='center')
 
         # Style the tables
         table1.set_fontsize(14)
@@ -111,6 +118,22 @@ class Visualize_search():
                                     
                                     interval=1000, repeat=True)
         anim.save(f'{filename}.gif', writer='pillow')
+
+    def __visualize_target(self, step, automaton_idx, graph, pos, ax):
+        if automaton_idx == step['target']['automata_id']:
+            nx.draw_networkx_nodes(graph, pos, ax=ax,
+                                nodelist=[step['target']['state']],
+                                node_color='red',
+                                node_size=300)
+
+    def __visualize_current_state(self, step, automaton_idx, graph, pos, ax):
+        if automaton_idx == step['current']['automata_id']:
+            nx.draw_networkx_nodes(graph, pos, ax=ax,
+                                nodelist=[step['current']['state']],
+                                node_color=None,
+                                edgecolors="black",
+                                node_size=300,
+                                linewidths=4)
 
     def __visualize_current_edge(self, step, automaton_idx, graph, pos, ax):
         
