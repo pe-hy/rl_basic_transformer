@@ -53,8 +53,8 @@ class Visualize_search():
         # target_state = current_goal['target_state']
         # target_automaton = current_goal['target_automaton']
         current_goal = 0
-        target_state = 0
-        target_automaton = 0
+        target_state = current_step['current']['state']
+        target_automaton = current_step['current']['automata_id']
 
         numbers = self.numbers
 
@@ -76,6 +76,13 @@ class Visualize_search():
                     node_color=self.colors[i], node_size=300,
                     font_size=8, font_weight='bold')
             
+            for edge in G.edges(data=True):
+                    if 'enabling' in edge[2]:
+                        for m, condition in enumerate(edge[2]['enabling']):
+                            edge_pos = pos[edge[0]] + (pos[edge[1]] - pos[edge[0]]) * 0.5
+
+                            plt.text(edge_pos[0]+0.05*m, edge_pos[1]+0.05, f'{condition["node_id"]}', color=self.colors[condition['automata_id']], fontsize=14)
+
             for item in current_step:
                 if item in self.visualize_dict:
                     self.visualize_dict[item](current_step, i, G, pos, ax)
@@ -102,7 +109,7 @@ class Visualize_search():
                         cellLoc='center',
                         loc='center',
                         bbox=[0.2*target_automaton, 0.6, 0.2, 0.5]) # prvni souradnice ovlivnuje umisteni vrchni bunky
-        
+
         # add text with current step number
         ax.text(0.5, -0.5, f'Step: {frame+1}', transform=ax.transAxes,
                 fontsize=40, ha='center', va='center')
@@ -124,7 +131,7 @@ class Visualize_search():
             nx.draw_networkx_nodes(graph, pos, ax=ax,
                                 nodelist=[step['target']['state']],
                                 node_color='red',
-                                node_size=300)
+                                node_size=500)
 
     def __visualize_current_state(self, step, automaton_idx, graph, pos, ax):
         if automaton_idx == step['current']['automata_id']:
@@ -132,7 +139,7 @@ class Visualize_search():
                                 nodelist=[step['current']['state']],
                                 node_color=None,
                                 edgecolors="black",
-                                node_size=300,
+                                node_size=400,
                                 linewidths=4)
 
     def __visualize_current_edge(self, step, automaton_idx, graph, pos, ax):
