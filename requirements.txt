@@ -1,3 +1,4 @@
+litgpt[all]
 datasets
 transformers
 lightning

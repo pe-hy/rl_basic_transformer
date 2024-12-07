@@ -1,3 +1,7 @@
+litgpt/data/
+litgpt/checkpoints/
+litgpt/sos/
+litgpt/pythia-160m-random-weights
 data/*
 __pycache__
 wandb
@@ -7,7 +11,7 @@ multirun/
 outputs/
 Cube/wandb_saves/
 unused/=4.2.0
-
+example_litgpt/data/*
 *.err
 *.out
 *job_output*
