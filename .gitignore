@@ -1,3 +1,5 @@
+litgpt/hf_trained_model/
+litgpt/trained_model/
 litgpt/data/
 litgpt/checkpoints/
 litgpt/sos/

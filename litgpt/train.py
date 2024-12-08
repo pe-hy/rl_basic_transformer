@@ -10,9 +10,6 @@ from lightning.pytorch.loggers import WandbLogger
 
 from omegaconf import DictConfig, OmegaConf
 
-from omegaconf import DictConfig, OmegaConf
-
-from omegaconf import DictConfig, OmegaConf
 
 cfg = OmegaConf.create({
     "data": {
@@ -97,24 +94,24 @@ if __name__ == "__main__":
     # llm.save("pythia-160m-random-weights")
     # del llm
 
-    lit_model = LitLLM(checkpoint_dir="pythia-160m-random-weights", tokenizer_dir="/mnt/raid/data/Hyner_Petr/rl/sos_branch/rl_basic_transformer/example_litgpt/checkpoints/EleutherAI/pythia-160m")
+    lit_model = LitLLM(checkpoint_dir="pythia-160m-random-weights", tokenizer_dir="/mnt/raid/data/Hyner_Petr/rl/sos_branch/rl_basic_transformer/litgpt/checkpoints/EleutherAI/pythia-160m")
     tokenizer = get_tokenizer(cfg.data)
     datasets = get_data(cfg, tokenizer)
 
     data = Datamodule(datasets, cfg.train.batchsize, cfg.data.num_workers, tokenizer)
 
     data.connect(max_seq_length=4096)
-    logger = WandbLogger(project="sos", name="Pythia-160m")
+    logger = WandbLogger(project="sos", name="Pythia-160m-rerun")
     trainer = L.Trainer(
         logger=logger,
         devices=2,
         accelerator="cuda",
-        max_epochs=20,
+        max_epochs=10,
         accumulate_grad_batches=accumulate_grad_batches,
         precision="bf16-true",
     )
     trainer.fit(lit_model, data)
 
     lit_model.llm.model.to(lit_model.llm.preprocessor.device)
-
+    lit_model.llm.save("trained_model")
     del lit_model
