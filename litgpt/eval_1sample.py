@@ -4,10 +4,12 @@ import random
 import argparse
 
 import tqdm
-
+from litgpt import LLM
+from litgpt.api import Preprocessor
+from litgpt.tokenizer import Tokenizer
 import numpy as np
 import torch
-from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM, GPTNeoForCausalLM, AutoModel, GPTNeoXForCausalLM
+from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM, GPTNeoForCausalLM, AutoModel
 from datasets import load_dataset, DatasetDict, Dataset
 
 from countdown_utils import *
@@ -27,7 +29,8 @@ parser.add_argument("--ctx", type=int, default=4096)
 parser.add_argument("--gens", type=int, default=1)
 
 
-def eval_ll(model, tokenizer, data, batch_size=128, context_len=4096, temperature=0.0, n=1):
+
+def eval_ll(model, tokenizer, data, batch_size=1, context_len=4104, temperature=0.0, n=1):
     """
     Evaluate the model on the data using a sliding window so that the context length is not exceeded
     """
@@ -36,20 +39,26 @@ def eval_ll(model, tokenizer, data, batch_size=128, context_len=4096, temperatur
         batch = data[b:min(b+batch_size, len(data))]
         output_texts = ["" for _ in range(len(batch))]
         tokenizer.padding_side = "left"
-        inputs = tokenizer(batch, return_tensors="pt", padding=True).to("cuda")
-        inputs = inputs['input_ids']
+        inputs = tokenizer.encode(batch[0], return_tensors="pt").to("cuda")
+        inputs = inputs.unsqueeze(0)
+        # print(batch[0])
+        # print(model._text_to_token_ids(batch[0]))
         # with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
 
         if n == 1:
             if temperature == 0.0:
-                outputs = model.generate(input_ids=inputs, pad_token_id=tokenizer.eos_token_id, attention_mask=torch.ones_like(inputs), max_length=context_len, num_beams=1, do_sample=False)
+                # outputs = model.generate(input_ids=inputs, pad_token_id=tokenizer.eos_token_id, attention_mask=torch.ones_like(inputs), max_length=context_len, num_beams=1, do_sample=False)
+                # outputs = generate_batch(model, idx=inputs, eos_id=tokenizer.eos_token_id, max_returned_tokens=context_len, temperature=temperature)
+                print(model.preprocessor.encode(batch[0]))
+                output_text = model.generate(prompt=batch[0], max_new_tokens=context_len, temperature=temperature, top_p=1.0, top_k=50)
+                output_text = batch[0] + " "+ output_text
             else:
-                outputs = model.generate(input_ids=inputs, pad_token_id=tokenizer.eos_token_id, attention_mask=torch.ones_like(inputs), max_length=context_len, num_beams=1, do_sample=True, temperature=temperature)
+                output_text = model.generate(prompt=batch[0], max_new_tokens=context_len, temperature=temperature)
             # split output vector into first N tokens and the rest
-            output_tokens = outputs
-            output_text = tokenizer.batch_decode(output_tokens, skip_special_tokens=False)
-            tokenizer.padding_side = "left"
-            output_texts = [ot + ot_now for ot, ot_now in zip(output_texts, output_text)]
+            # output_tokens = outputs
+            # output_text = tokenizer.decode(output_tokens, skip_special_tokens=False)
+            # tokenizer.padding_side = "left"
+            output_texts = [ot + ot_now for ot, ot_now in zip(output_texts, [output_text])]
             # print token lens of tokenized outputs
             print([len(tokenizer(ot)['input_ids']) for ot in output_texts])
             output_texts_concat += output_texts
@@ -58,10 +67,10 @@ def eval_ll(model, tokenizer, data, batch_size=128, context_len=4096, temperatur
             all_outputs = []
             all_ratings = []
             for i in range(n):
-                outputs = model.generate(input_ids=inputs, pad_token_id=tokenizer.eos_token_id, attention_mask=torch.ones_like(inputs), max_length=context_len, do_sample=True, temperature=temperature)
-                output_tokens = outputs
-                output_text = tokenizer.batch_decode(output_tokens, skip_special_tokens=False)
-                tokenizer.padding_side = "left"
+                output_text = model.generate(prompt=batch[0], max_new_tokens=context_len, temperature=temperature)
+                # output_tokens = outputs
+                # output_text = tokenizer.batch_decode(output_tokens, skip_special_tokens=False)
+                # tokenizer.padding_side = "left"
                 # get rating for each output
                 ratings = [metric_fn(ot.split(tokenizer.bos_token)[1], mode="sft")[0] for ot in output_text]
                 all_ratings.append(ratings)
@@ -82,21 +91,18 @@ def eval_ll(model, tokenizer, data, batch_size=128, context_len=4096, temperatur
 
 args = parser.parse_args()
 torch.manual_seed(args.seed)
-state_dict = torch.load(f"{args.ckpt}/model.pth")
-model = AutoModelForCausalLM.from_pretrained(
-    args.ckpt, 
-    torch_dtype=torch.bfloat16, 
-    local_files_only=True,
-    state_dict=state_dict, 
-    attn_implementation="flash_attention_2"
-)
-model.cuda()
-# model.to("cuda")
-model.eval()
-print("here")
+# state_dict = torch.load("/mnt/raid/data/Hyner_Petr/rl/sos_branch/rl_basic_transformer/litgpt/hf_trained_model/model.pth")
+# model = AutoModel.from_pretrained(args.ckpt, local_files_only=True, state_dict=state_dict)
+# model = GPTNeoForCausalLM.from_pretrained(args.ckpt, torch_dtype=torch.bfloat16, attn_implementation='flash_attention_2')
+
 tokenizer = AutoTokenizer.from_pretrained(args.ckpt, padding_side='left')
 tokenizer.pad_token = tokenizer.eos_token
-
+# tokenizer = Tokenizer("/mnt/raid/data/Hyner_Petr/rl/sos_branch/rl_basic_transformer/litgpt/trained_model")
+model = LLM.load("/mnt/raid/data/Hyner_Petr/rl/sos_branch/rl_basic_transformer/litgpt/trained_model")
+# model.preprocessor = Preprocessor(tokenizer, "cuda")
+model.eval()
+#model.cpu()
+model.cuda()
 data_file = os.path.join(args.data_dir, args.data)
 
 with open(data_file, "r") as json_file:
@@ -106,11 +112,12 @@ predictions = []
 pred_ratings = []
 pred_reasons = []
 tokenizer.padding_side = "left"
-test_prompts = [tokenizer.bos_token + f"S {sample['target']} [ {' '.join(map(str,sample['nums']))} ] ," 
-                          for sample in data[:100]]
+test_prompts = [tokenizer.bos_token + f" S {sample['target']} [ {' '.join(map(str,sample['nums']))} ] ," 
+                          for sample in data[:100]] # TODO
 len_nums = [len(sample['nums']) for sample in data[args.offset:args.num]]
+# test_prompts = [test_prompts[-3]]
 data_4 = [d for d, l in zip(test_prompts, len_nums) if l == 4]
-predictions = eval_ll(model, tokenizer, data_4, batch_size=args.batch_size, context_len=args.ctx, temperature=args.temperature, n=args.gens)
+predictions = eval_ll(model, tokenizer, data_4, batch_size=1, context_len=4087, temperature=args.temperature, n=args.gens)
 
 len_pred_nums = [4 for _ in predictions]
 

@@ -98,7 +98,7 @@ if __name__ == "__main__":
     tokenizer = get_tokenizer(cfg.data)
     datasets = get_data(cfg, tokenizer)
 
-    data = Datamodule(datasets, cfg.train.batchsize, cfg.data.num_workers, tokenizer)
+    data = Datamodule(datasets, cfg.train.batchsize, cfg.data.num_workers, lit_model.tokenizer)
 
     data.connect(max_seq_length=4096)
     logger = WandbLogger(project="sos", name="Pythia-160m-rerun")
