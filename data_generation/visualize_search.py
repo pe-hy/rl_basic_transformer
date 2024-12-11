@@ -24,14 +24,12 @@ class Visualize_search():
         self.visualize_dict = {
         'shortest_paths_visualize': 
             lambda step, automaton_idx, graph, pos, ax: self.__highlight_shortest_path(step, automaton_idx, graph, pos, ax),
-        'current_edges_visualize': 
-            lambda step, automaton_idx, graph, pos, ax: self.__visualize_current_edge(step, automaton_idx, graph, pos, ax),
-        'highlighted_states': 
-            lambda step, automaton_idx, graph, pos, ax: self.__highlight_state(step, automaton_idx, graph, pos, ax),
         'edge_conditions_visualize': 
             lambda step, automaton_idx, graph, pos, ax: self.__visualize_edge_conditions(step, automaton_idx, graph, pos, ax),
-        'current':
-            lambda step, automaton_idx, graph, pos, ax: self.__visualize_current_state(step, automaton_idx, graph, pos, ax),
+        'edge':
+            lambda step, automaton_idx, graph, pos, ax: self.__visualize_current_edge(step, automaton_idx, graph, pos, ax),
+        'states':
+            lambda step, automaton_idx, graph, pos, ax: self.__visualize_current_states(step, automaton_idx, graph, pos, ax),
         'target':
             lambda step, automaton_idx, graph, pos, ax: self.__visualize_target(step, automaton_idx, graph, pos, ax)
         }
@@ -53,10 +51,8 @@ class Visualize_search():
         # target_state = current_goal['target_state']
         # target_automaton = current_goal['target_automaton']
         current_goal = 0
-        target_state = current_step['current']['state']
-        target_automaton = current_step['current']['automata_id']
-
-        numbers = self.numbers
+        target_automaton = current_step['automata_id']
+        target_state = current_step['states'][target_automaton]
 
         # Clear the figure
         self.fig.clear()
@@ -76,13 +72,19 @@ class Visualize_search():
                     node_color=self.colors[i], node_size=300,
                     font_size=8, font_weight='bold')
             
+            # Visualize edge conditions
             for edge in G.edges(data=True):
                     if 'enabling' in edge[2]:
                         for m, condition in enumerate(edge[2]['enabling']):
                             edge_pos = pos[edge[0]] + (pos[edge[1]] - pos[edge[0]]) * 0.5
 
-                            plt.text(edge_pos[0]+0.05*m, edge_pos[1]+0.05, f'{condition["node_id"]}', color=self.colors[condition['automata_id']], fontsize=14)
+                            plt.text(edge_pos[0]+0.05*m,
+                                     edge_pos[1]+0.05,
+                                     f'{condition["node_id"]}',
+                                     color=self.colors[condition['automata_id']],
+                                     fontsize=14)
 
+            # Visualize current step
             for item in current_step:
                 if item in self.visualize_dict:
                     self.visualize_dict[item](current_step, i, G, pos, ax)
@@ -98,7 +100,7 @@ class Visualize_search():
         top_row = [str(target_state)]
         top_colors = [self.colors[target_automaton]]
         # Create sample data for tables
-        table1 = ax.table(cellText=[numbers],
+        table1 = ax.table(cellText=[self.steps[frame]['previous_states']],
                         cellColours=[self.colors],
                         cellLoc='center',
                         loc='center',
@@ -133,44 +135,31 @@ class Visualize_search():
                                 node_color='red',
                                 node_size=500)
 
-    def __visualize_current_state(self, step, automaton_idx, graph, pos, ax):
-        if automaton_idx == step['current']['automata_id']:
+    def __visualize_current_states(self, step, automaton_idx, graph, pos, ax):
+        if automaton_idx == step['automata_id']:
             nx.draw_networkx_nodes(graph, pos, ax=ax,
-                                nodelist=[step['current']['state']],
+                                nodelist=[step['previous_states'][automaton_idx]],
                                 node_color=None,
                                 edgecolors="black",
                                 node_size=400,
                                 linewidths=4)
+        else:
+            nx.draw_networkx_nodes(graph, pos, ax=ax,
+                                nodelist=[step['states'][automaton_idx]],
+                                node_color=None,
+                                edgecolors="yellow",
+                                node_size=300,
+                                linewidths=4)
+        
 
     def __visualize_current_edge(self, step, automaton_idx, graph, pos, ax):
-        
-        current_edge = step['current_edges'][automaton_idx]
-
-        if step['visualize']['current_edges_visualize'][automaton_idx] == True and current_edge != None:
-            color = current_edge['color']
-            width = current_edge['width']
+        if automaton_idx == step['automata_id']:
+            current_edge = step['edge']
             
             nx.draw_networkx_edges(graph, pos, ax=ax,
-                                    edgelist=[(current_edge['edge'][0], current_edge['edge'][1])],
-                                    edge_color=color,
-                                    width=width)
-            
-    def __highlight_state(self, step, automaton_idx, graph, pos, ax):
-        hightlighted_nodes = step['visualize']['highlighted_states'][automaton_idx]
-
-        if hightlighted_nodes != None:
-
-            for item in hightlighted_nodes:
-                color = item['color']
-                node_size = item['node_size']
-                edge_color = item['edge_color']
-                linewidth =  item['linewidth']
-                nx.draw_networkx_nodes(graph, pos, ax=ax,
-                                    nodelist=[item['state']],
-                                    node_color=color,
-                                    edgecolors=edge_color,
-                                    node_size=node_size,
-                                    linewidths=linewidth)
+                                    edgelist=[(current_edge[0], current_edge[1])],
+                                    edge_color='red',
+                                    width=5)
         
     def __highlight_shortest_path(self, step, automaton_idx, graph, pos, ax):
         if step['visualize']['shortest_paths_visualize'][automaton_idx] and step['shortest_paths'][automaton_idx] != None:
@@ -183,15 +172,5 @@ class Visualize_search():
                                     width=3)
                 
     def __visualize_edge_conditions(self, step, automaton_idx, graph, pos, ax):
-        if step['visualize']['edge_conditions_visualize'][automaton_idx] and step['edge_conditions'][automaton_idx] != None:
-            for edge in graph.edges(data=True):
-                    for m, condition in enumerate(step["edge_conditions"][automaton_idx][(edge[0], edge[1])]):
-                        edge_pos = pos[edge[0]] + (pos[edge[1]] - pos[edge[0]]) * 0.5
-                        
-                        if condition['solved'] == True:
-                            plt.text(edge_pos[0]+0.05*m, edge_pos[1]+0.05, f'{condition["state"]}', color=SOLVED_CONDITION_COLOR, fontsize=SOLVED_CONDITION_FONTSIZE)
-                        elif condition['being_solved'] == True:
-                            plt.text(edge_pos[0]+0.05*m, edge_pos[1]+0.05, f'{condition["state"]}', color=condition['color'], fontsize=SOLVING_CONDITION_FONTSIZE)
-                        else:
-                            plt.text(edge_pos[0]+0.05*m, edge_pos[1]+0.05, f'{condition["state"]}', color=condition['color'], fontsize=condition['fontsize'])
+        pass
         
