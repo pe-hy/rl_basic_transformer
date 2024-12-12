@@ -22,8 +22,8 @@ class Visualize_search():
         self.enabling_conditions = []
 
         self.visualize_dict = {
-        'shortest_paths_visualize': 
-            lambda step, automaton_idx, graph, pos, ax: self.__highlight_shortest_path(step, automaton_idx, graph, pos, ax),
+        'shortest_path': 
+            lambda step, automaton_idx, graph, pos, ax: self.__visualize_shortest_path(step, automaton_idx, graph, pos, ax),
         'edge_conditions_visualize': 
             lambda step, automaton_idx, graph, pos, ax: self.__visualize_edge_conditions(step, automaton_idx, graph, pos, ax),
         'edge':
@@ -166,9 +166,9 @@ class Visualize_search():
                                     edge_color='red',
                                     width=5)
         
-    def __highlight_shortest_path(self, step, automaton_idx, graph, pos, ax):
-        if step['visualize']['shortest_paths_visualize'][automaton_idx] and step['shortest_paths'][automaton_idx] != None:
-            shortest_path = step['shortest_paths'][automaton_idx]['path']
+    def __visualize_shortest_path(self, step, automaton_idx, graph, pos, ax):
+        if automaton_idx == step['automata_id']:
+            shortest_path = step['shortest_path']
 
             for i in range(len(shortest_path)-1):
                 nx.draw_networkx_edges(graph, pos, ax=ax,
