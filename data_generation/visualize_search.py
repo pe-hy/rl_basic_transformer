@@ -52,7 +52,7 @@ class Visualize_search():
         # target_automaton = current_goal['target_automaton']
         current_goal = 0
         target_automaton = current_step['automata_id']
-        target_state = current_step['states'][target_automaton]
+        target_state = current_step['next_state']
 
         # Clear the figure
         self.fig.clear()
@@ -100,7 +100,7 @@ class Visualize_search():
         top_row = [str(target_state)]
         top_colors = [self.colors[target_automaton]]
         # Create sample data for tables
-        table1 = ax.table(cellText=[self.steps[frame]['previous_states']],
+        table1 = ax.table(cellText=[self.steps[frame]['states']],
                         cellColours=[self.colors],
                         cellLoc='center',
                         loc='center',
@@ -137,19 +137,24 @@ class Visualize_search():
 
     def __visualize_current_states(self, step, automaton_idx, graph, pos, ax):
         if automaton_idx == step['automata_id']:
-            nx.draw_networkx_nodes(graph, pos, ax=ax,
-                                nodelist=[step['previous_states'][automaton_idx]],
-                                node_color=None,
-                                edgecolors="black",
-                                node_size=400,
-                                linewidths=4)
+            edgecolors = "black"
+            node_size = 400
+            linewidths = 4
         else:
-            nx.draw_networkx_nodes(graph, pos, ax=ax,
+            edgecolors = "yellow"
+            node_size = 300
+            linewidths = 4
+            
+        color = self.colors[automaton_idx]
+        if automaton_idx == step['target']['automata_id'] and step['states'][automaton_idx] == step['target']['state']:
+            color = 'red'
+
+        nx.draw_networkx_nodes(graph, pos, ax=ax,
                                 nodelist=[step['states'][automaton_idx]],
-                                node_color=None,
-                                edgecolors="yellow",
-                                node_size=300,
-                                linewidths=4)
+                                node_color=color,
+                                edgecolors=edgecolors,
+                                node_size=node_size,
+                                linewidths=linewidths)
         
 
     def __visualize_current_edge(self, step, automaton_idx, graph, pos, ax):
