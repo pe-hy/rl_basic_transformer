@@ -1,5 +1,5 @@
 model/pythia-160m-random
-hf_trained_model_old/
+hf_model_pythia_160m/
 temp/
 data/
 checkpoints/
