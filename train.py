@@ -15,9 +15,52 @@ from litgpt.config import configs, Config, name_to_config
 from litgpt.model import GPT
 from litgpt.api import Preprocessor
 
+import json
+import os
+
+
+def get_configs(cfg: DictConfig):
+    conf = Config(
+        **dict(
+            name="pythia-14m",
+            hf_config=dict(org="EleutherAI", name="pythia-14m"),
+            block_size=cfg.model.block_size,
+            n_layer=cfg.model.n_layer,
+            n_embd=cfg.model.n_embd,
+            n_head=cfg.model.n_head,
+            padding_multiple=128,
+            padded_vocab_size=cfg.model.padded_vocab_size,
+        )
+    )
+
+    hf_conf = {
+        "architectures": ["GPTNeoXForCausalLM"],
+        "bos_token_id": cfg.model.bos_id,
+        "classifier_dropout": 0.1,
+        "eos_token_id": cfg.model.eos_id,
+        "hidden_act": "gelu",
+        "hidden_size": cfg.model.n_embd,
+        "initializer_range": 0.02,
+        "intermediate_size": 512,
+        "layer_norm_eps": 1e-05,
+        "max_position_embeddings": cfg.model.block_size,
+        "model_type": "gpt_neox",
+        "num_attention_heads": cfg.model.n_head,
+        "num_hidden_layers": cfg.model.n_layer,
+        "rotary_emb_base": 10000,
+        "rotary_pct": 0.25,
+        "tie_word_embeddings": False,
+        "torch_dtype": "float16",
+        "transformers_version": "4.29.2",
+        "use_cache": True,
+        "use_parallel_residual": True,
+        "vocab_size": cfg.model.padded_vocab_size,
+    }
+    return conf, hf_conf
+
 
 class LitLLM(L.LightningModule):
-    def __init__(self, model, preprocessor, trainer_ckpt_path=None):
+    def __init__(self, cfg, model, preprocessor, trainer_ckpt_path=None):
         super().__init__()
 
         # self.llm = LLM.load(
@@ -30,12 +73,15 @@ class LitLLM(L.LightningModule):
         # )
 
         self.llm = model
-
+        self.cfg = cfg
+        self.preprocessor = preprocessor
         self.trainer_ckpt_path = trainer_ckpt_path
+        _, self.hf_conf = get_configs(cfg)
 
     def setup(self, stage):
-        pass
-        # self.llm.trainer_setup(trainer_ckpt=self.trainer_ckpt_path)
+        self.preprocessor.tokenizer.save_pretrained(self.cfg.convert_hf.in_path)
+        with open(os.path.join(self.cfg.convert_hf.in_path, "config.json"), "w") as f:
+            json.dump(self.hf_conf, f, indent=2)
 
     def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
         idx, targets, att_mask = (
@@ -79,18 +125,7 @@ class LitLLM(L.LightningModule):
 
 @hydra.main(config_path="config", config_name="config", version_base=None)
 def main(cfg: DictConfig):
-    conf = Config(
-        **dict(
-            name="pythia-14m",
-            hf_config=dict(org="EleutherAI", name="pythia-14m"),
-            block_size=cfg.model.block_size,
-            n_layer=cfg.model.n_layer,
-            n_embd=cfg.model.n_embd,
-            n_head=cfg.model.n_head,
-            padding_multiple=128,
-            padded_vocab_size=cfg.model.padded_vocab_size,
-        )
-    )
+    conf, _ = get_configs(cfg)
 
     batch_size = cfg.model.batch_size
     accumulate_grad_batches = cfg.model.accumulate_grad_batches
@@ -100,9 +135,8 @@ def main(cfg: DictConfig):
         tokenizer, device="cuda" if torch.cuda.is_available() else "cpu"
     )
     model = LLM(GPT(conf), preprocessor=preprocessor, config=conf)
-    print(model.model)
 
-    lit_model = LitLLM(model=model, preprocessor=preprocessor)
+    lit_model = LitLLM(model=model, cfg=cfg, preprocessor=preprocessor)
     # lit_model.llm.preprocessor.tokenizer = get_tokenizer(cfg.tok_data)
     # tokenizer = lit_model.llm.preprocessor.tokenizer
     datasets = get_data(cfg, tokenizer)

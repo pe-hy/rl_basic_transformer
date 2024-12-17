@@ -19,7 +19,7 @@ data:
   train_file: "sos/train1_b4_t30_n200000_dfs.json"
   val_target_file: "sos/val_target1_b4_t30_n200000_dfs.json"
   val_file: "sos/val1_b4_t30_n200000_dfs.json"
-  num_train: 2e5
+  num_train: 2e1
   num_workers: 64
 
 model:
@@ -31,7 +31,10 @@ model:
   n_layer: 6
   n_head: 4
   n_embd: 128
+  vocab_size: 410
   padded_vocab_size: 410
+  bos_id: 395
+  eos_id: 399
   checkpoint_dir: "model/${dl_model.full_path}"
   tokenizer_path: "model/${dl_model.full_path}"
 
