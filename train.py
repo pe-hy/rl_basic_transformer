@@ -158,7 +158,7 @@ def main(cfg: DictConfig):
     )
 
     trainer = L.Trainer(
-        devices=1,
+        devices=2,
         accelerator="cuda",
         max_epochs=cfg.model.epochs,
         accumulate_grad_batches=accumulate_grad_batches,
