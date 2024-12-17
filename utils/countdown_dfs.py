@@ -1,6 +1,6 @@
 import itertools
 
-from countdown_utils import combine_nums, CountdownNode, sum_heuristic, mult_heuristic, metric_fn
+from utils.countdown_utils import combine_nums, CountdownNode, sum_heuristic, mult_heuristic, metric_fn
 
 def dfs(target, nums, heuristic=sum_heuristic, threshold=None, search_trace="", open_set=[]):
     if len(open_set) == 0:

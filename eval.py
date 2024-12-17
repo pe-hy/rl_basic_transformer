@@ -106,7 +106,7 @@ predictions = []
 pred_ratings = []
 pred_reasons = []
 tokenizer.padding_side = "left"
-test_prompts = [tokenizer.bos_token + f"S {sample['target']} [ {' '.join(map(str,sample['nums']))} ] ," 
+test_prompts = [f"S {sample['target']} [ {' '.join(map(str,sample['nums']))} ] ," 
                           for sample in data[:100]]
 len_nums = [len(sample['nums']) for sample in data[args.offset:args.num]]
 data_4 = [d for d, l in zip(test_prompts, len_nums) if l == 4]

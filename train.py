@@ -15,7 +15,7 @@ class LitLLM(L.LightningModule):
         super().__init__()
 
         self.llm = LLM.load(checkpoint_dir, tokenizer_dir=tokenizer_dir, distribute=None)
-        
+    
         self.trainer_ckpt_path = trainer_ckpt_path
 
     def setup(self, stage):
@@ -56,7 +56,6 @@ def main(cfg: DictConfig):
     lit_model.llm.preprocessor.tokenizer = get_tokenizer(cfg.tok_data)
     tokenizer = lit_model.llm.preprocessor.tokenizer
     datasets = get_data(cfg, tokenizer)
-
     data = Datamodule(datasets, batch_size, num_workers, tokenizer)
 
     data.connect(max_seq_length=cfg.model.block_size)

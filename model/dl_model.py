@@ -7,13 +7,25 @@ from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import WhitespaceSplit
 from pathlib import Path 
-
+import shutil
 @hydra.main(config_path="../config", config_name="config", version_base=None)
 def main(cfg: DictConfig):
     checkpoint_dir = Path(cfg.dl_model.model_folder)
-    print(cfg.dl_model.full_path)
-
     download.download_from_hub(repo_id=cfg.dl_model.name, tokenizer_only=False, checkpoint_dir=checkpoint_dir)
+    llm = LLM.load("EleutherAI/pythia-160m", tokenizer_dir="EleutherAI/pythia-160m", init="random")
+    llm.save("weights")
+    del llm
+    weights_dir = Path("weights")
+    source_path = weights_dir / "lit_model.pth"
+    target_dir = Path(cfg.dl_model.full_path)
+    target_path = target_dir / "lit_model.pth"
+    
+    target_dir.mkdir(parents=True, exist_ok=True)
+    if target_path.exists():
+        target_path.unlink()
+    shutil.move(str(source_path), str(target_path))
+    shutil.rmtree(weights_dir)
+
     get_tokenizer(cfg)
 
 def get_tokenizer(cfg: DictConfig):

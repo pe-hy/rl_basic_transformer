@@ -37,7 +37,7 @@ eval:
   eval_interval: 1000
 
 dl_model:
-  model_folder: "pythia-160m-random"
+  model_folder: "checkpoints"
   name: "EleutherAI/pythia-160m"
   full_path: "${dl_model.model_folder}/${dl_model.name}/"
 

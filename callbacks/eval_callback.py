@@ -108,6 +108,9 @@ class EvalCallback(Callback):
         if (trainer.global_step % self.eval_interval == 0 and 
             trainer.global_step > self.last_eval_step and 
             trainer.is_global_zero):
+            print(f"Saving model before evaluation...")
+            pl_module.llm.model.to(pl_module.llm.preprocessor.device)
+            pl_module.llm.save(self.save_path)
             self.run_evaluation(trainer, pl_module)
 
     def run_evaluation(self, trainer, pl_module):

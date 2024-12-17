@@ -4,7 +4,7 @@ import random
 
 import tiktoken
 
-from countdown_utils import combine_nums, CountdownNode, sum_heuristic, mult_heuristic, metric_fn
+from utils.countdown_utils import combine_nums, CountdownNode, sum_heuristic, mult_heuristic, metric_fn
 
 def bfs(target, nums, beam_size, heuristic=sum_heuristic):
     search_trace = ""
