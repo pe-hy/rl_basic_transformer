@@ -1,3 +1,4 @@
+logs/
 model/pythia-160m-random
 hf_model_pythia_160m/
 temp/

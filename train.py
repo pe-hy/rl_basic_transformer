@@ -86,7 +86,7 @@ class LitLLM(L.LightningModule):
 @hydra.main(config_path="config", config_name="config", version_base=None)
 def main(cfg: DictConfig):
     conf, _ = hf_config.get_configs(cfg)
-
+    print(conf)
     batch_size = cfg.model.batch_size
     accumulate_grad_batches = cfg.model.accumulate_grad_batches
     num_workers = cfg.data.num_workers
@@ -115,18 +115,8 @@ def main(cfg: DictConfig):
         save_path=cfg.convert_hf.in_path,
     )
 
-    # trainer = L.Trainer(
-    #     devices=2,
-    #     accelerator="cuda",
-    #     max_epochs=cfg.model.epochs,
-    #     accumulate_grad_batches=accumulate_grad_batches,
-    #     precision="bf16-true",
-    #     val_check_interval=1.0,
-    #     callbacks=[eval_callback],
-    #     logger=logger,
-    # )
     trainer = L.Trainer(
-        devices="auto",  # Will use all available GPUs for this task
+        devices=1,
         accelerator="cuda",
         max_epochs=cfg.model.epochs,
         accumulate_grad_batches=accumulate_grad_batches,
@@ -134,7 +124,6 @@ def main(cfg: DictConfig):
         val_check_interval=1.0,
         callbacks=[eval_callback],
         logger=logger,
-        strategy="ddp",  # Add this to use DDP for multi-GPU training
     )
     trainer.fit(lit_model, data)
 

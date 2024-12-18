@@ -8,34 +8,26 @@ hydra:
   output_subdir: null  
   run:  
     dir: .
-  mode: MULTIRUN  # Moved this up one level
+  mode: MULTIRUN
   sweeper:
     params:
       model.n_layer: 4,6,8
-      model:
-        - n_embd: 32
-          n_head: 2
-        - n_embd: 32
-          n_head: 4
-        - n_embd: 64
-          n_head: 2
-        - n_embd: 64
-          n_head: 4
+      model.n_embd: 32,64
+      model.n_head: 2,4
   launcher:
-    submitit_folder: ${hydra.runtime.output_dir}/.submitit/%j
-    timeout_min: 2880  # 24 hours
-    cpus_per_task: 8
-    gpus_per_node: 4
-    tasks_per_node: 4
-    mem_gb: 128
-    nodes: 3
+    _target_: hydra_plugins.hydra_submitit_launcher.submitit_launcher.SlurmLauncher
+    submitit_folder: ./logs/submitit/%j
+    timeout_min: 1440
+    gres: "gpu:8"          # Request 8 GPUs
+    tasks_per_node: 8      # Run 8 tasks per node
+    nodes: 1
     name: ${model.name}
-    partition: "gpu"
+    partition: "qgpu"
+    account: "OPEN-30-4"
     comment: null
     constraint: null
     max_num_timeout: 0
-    array_parallelism: 4
-
+    array_parallelism: 1
 
 tok_data:
   train_file: "../data/sos/train1_b4_t30_n200000_dfs.json"
