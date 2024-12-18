@@ -86,7 +86,13 @@ class LitLLM(L.LightningModule):
 @hydra.main(config_path="config", config_name="config", version_base=None)
 def main(cfg: DictConfig):
     conf, _ = hf_config.get_configs(cfg)
-    print(conf)
+    
+    print("Current model configuration:")
+    print(f"n_layer: {cfg.model.n_layer}")
+    print(f"n_head: {cfg.model.n_head}")
+    print(f"n_embd: {cfg.model.n_embd}")
+    print(f"Model name: {cfg.model.name}")
+
     batch_size = cfg.model.batch_size
     accumulate_grad_batches = cfg.model.accumulate_grad_batches
     num_workers = cfg.data.num_workers

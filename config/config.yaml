@@ -15,19 +15,19 @@ hydra:
       model.n_embd: 32,64
       model.n_head: 2,4
   launcher:
-    _target_: hydra_plugins.hydra_submitit_launcher.submitit_launcher.SlurmLauncher
-    submitit_folder: ./logs/submitit/%j
-    timeout_min: 1440
-    gres: "gpu:8"          # Request 8 GPUs
-    tasks_per_node: 8      # Run 8 tasks per node
-    nodes: 1
     name: ${model.name}
+    _target_: hydra_plugins.hydra_submitit_launcher.submitit_launcher.SlurmLauncher
+    submitit_folder: logs/${model.name}/%j
+    timeout_min: 1440
+    gres: "gpu:8"          
+    tasks_per_node: 4     
+    nodes: 1              
+    array_parallelism: 4   
     partition: "qgpu"
     account: "OPEN-30-4"
     comment: null
     constraint: null
     max_num_timeout: 0
-    array_parallelism: 1
 
 tok_data:
   train_file: "../data/sos/train1_b4_t30_n200000_dfs.json"
@@ -41,10 +41,10 @@ data:
   val_target_file: "sos/val_target1_b4_t30_n200000_dfs.json"
   val_file: "sos/val1_b4_t30_n200000_dfs.json"
   num_train: 2e5
-  num_workers: 64
+  num_workers: 16
 
 model:
-  name: "Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs"
+  name: Pythia-${hydra:runtime.choices.model.n_layer}-${hydra:runtime.choices.model.n_head}-${hydra:runtime.choices.model.n_embd}-dfs
   batch_size: 12
   accumulate_grad_batches: 1
   block_size: 4096
