@@ -10,6 +10,7 @@ def get_configs(cfg: DictConfig):
             n_layer=cfg.model.n_layer,
             n_embd=cfg.model.n_embd,
             n_head=cfg.model.n_head,
+            intermediate_size=cfg.model.n_embd * 4,
             padding_multiple=128,
             padded_vocab_size=cfg.model.padded_vocab_size,
         )
@@ -23,7 +24,7 @@ def get_configs(cfg: DictConfig):
         "hidden_act": "gelu",
         "hidden_size": cfg.model.n_embd,
         "initializer_range": 0.02,
-        "intermediate_size": 512,
+        "intermediate_size": cfg.model.n_embd * 4,
         "layer_norm_eps": 1e-05,
         "max_position_embeddings": cfg.model.block_size,
         "model_type": "gpt_neox",

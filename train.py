@@ -87,6 +87,8 @@ class LitLLM(L.LightningModule):
 def main(cfg: DictConfig):
     conf, _ = hf_config.get_configs(cfg)
     
+    wandb_config = OmegaConf.to_container(cfg, resolve=True)
+
     print("Current model configuration:")
     print(f"n_layer: {cfg.model.n_layer}")
     print(f"n_head: {cfg.model.n_head}")
@@ -108,8 +110,8 @@ def main(cfg: DictConfig):
 
     data.connect(max_seq_length=cfg.model.block_size)
 
-    logger = WandbLogger(project="sos", name=f"{cfg.model.name}")
-
+    logger = WandbLogger(project="sos", name=f"{cfg.model.name}", config=wandb_config)
+    
     eval_callback = EvalCallback(
         data_dir=cfg.data.datapath,
         eval_data=cfg.data.val_file,

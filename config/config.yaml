@@ -12,17 +12,17 @@ hydra:
   sweeper:
     params:
       model.n_layer: 4,6,8
-      model.n_embd: 32,64
+      model.n_embd: 16,32,64
       model.n_head: 2,4
   launcher:
-    name: ${model.name}
+    name: Pythia-multirun
     _target_: hydra_plugins.hydra_submitit_launcher.submitit_launcher.SlurmLauncher
-    submitit_folder: logs/${model.name}/%j
+    submitit_folder: logs/Pythia-multirun/%j
     timeout_min: 1440
     gres: "gpu:8"          
-    tasks_per_node: 4     
+    tasks_per_node: 8
     nodes: 1              
-    array_parallelism: 4   
+    array_parallelism: 8  
     partition: "qgpu"
     account: "OPEN-30-4"
     comment: null
@@ -40,11 +40,11 @@ data:
   train_file: "sos/train1_b4_t30_n200000_dfs.json"
   val_target_file: "sos/val_target1_b4_t30_n200000_dfs.json"
   val_file: "sos/val1_b4_t30_n200000_dfs.json"
-  num_train: 2e5
+  num_train: 2e2
   num_workers: 16
 
 model:
-  name: Pythia-${hydra:runtime.choices.model.n_layer}-${hydra:runtime.choices.model.n_head}-${hydra:runtime.choices.model.n_embd}-dfs
+  name: Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs
   batch_size: 12
   accumulate_grad_batches: 1
   block_size: 4096
