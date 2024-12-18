@@ -10,53 +10,13 @@ from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig, OmegaConf
 from callbacks.eval_callback import EvalCallback
 from callbacks.save_callback import SaveBeforeEvalCallback
-
+from config import hf_config
 from litgpt.config import configs, Config, name_to_config
 from litgpt.model import GPT
 from litgpt.api import Preprocessor
 
 import json
 import os
-
-
-def get_configs(cfg: DictConfig):
-    conf = Config(
-        **dict(
-            name="pythia-14m",
-            hf_config=dict(org="EleutherAI", name="pythia-14m"),
-            block_size=cfg.model.block_size,
-            n_layer=cfg.model.n_layer,
-            n_embd=cfg.model.n_embd,
-            n_head=cfg.model.n_head,
-            padding_multiple=128,
-            padded_vocab_size=cfg.model.padded_vocab_size,
-        )
-    )
-
-    hf_conf = {
-        "architectures": ["GPTNeoXForCausalLM"],
-        "bos_token_id": cfg.model.bos_id,
-        "classifier_dropout": 0.1,
-        "eos_token_id": cfg.model.eos_id,
-        "hidden_act": "gelu",
-        "hidden_size": cfg.model.n_embd,
-        "initializer_range": 0.02,
-        "intermediate_size": 512,
-        "layer_norm_eps": 1e-05,
-        "max_position_embeddings": cfg.model.block_size,
-        "model_type": "gpt_neox",
-        "num_attention_heads": cfg.model.n_head,
-        "num_hidden_layers": cfg.model.n_layer,
-        "rotary_emb_base": 10000,
-        "rotary_pct": 0.25,
-        "tie_word_embeddings": False,
-        "torch_dtype": "float16",
-        "transformers_version": "4.29.2",
-        "use_cache": True,
-        "use_parallel_residual": True,
-        "vocab_size": cfg.model.padded_vocab_size,
-    }
-    return conf, hf_conf
 
 
 class LitLLM(L.LightningModule):
@@ -76,7 +36,7 @@ class LitLLM(L.LightningModule):
         self.cfg = cfg
         self.preprocessor = preprocessor
         self.trainer_ckpt_path = trainer_ckpt_path
-        _, self.hf_conf = get_configs(cfg)
+        _, self.hf_conf = hf_config.get_configs(cfg)
 
     def setup(self, stage):
         self.preprocessor.tokenizer.save_pretrained(self.cfg.convert_hf.in_path)
@@ -125,7 +85,7 @@ class LitLLM(L.LightningModule):
 
 @hydra.main(config_path="config", config_name="config", version_base=None)
 def main(cfg: DictConfig):
-    conf, _ = get_configs(cfg)
+    conf, _ = hf_config.get_configs(cfg)
 
     batch_size = cfg.model.batch_size
     accumulate_grad_batches = cfg.model.accumulate_grad_batches
@@ -137,8 +97,6 @@ def main(cfg: DictConfig):
     model = LLM(GPT(conf), preprocessor=preprocessor, config=conf)
 
     lit_model = LitLLM(model=model, cfg=cfg, preprocessor=preprocessor)
-    # lit_model.llm.preprocessor.tokenizer = get_tokenizer(cfg.tok_data)
-    # tokenizer = lit_model.llm.preprocessor.tokenizer
     datasets = get_data(cfg, tokenizer)
     data = Datamodule(datasets, batch_size, num_workers, tokenizer)
 
@@ -157,8 +115,18 @@ def main(cfg: DictConfig):
         save_path=cfg.convert_hf.in_path,
     )
 
+    # trainer = L.Trainer(
+    #     devices=2,
+    #     accelerator="cuda",
+    #     max_epochs=cfg.model.epochs,
+    #     accumulate_grad_batches=accumulate_grad_batches,
+    #     precision="bf16-true",
+    #     val_check_interval=1.0,
+    #     callbacks=[eval_callback],
+    #     logger=logger,
+    # )
     trainer = L.Trainer(
-        devices=2,
+        devices="auto",  # Will use all available GPUs for this task
         accelerator="cuda",
         max_epochs=cfg.model.epochs,
         accumulate_grad_batches=accumulate_grad_batches,
@@ -166,6 +134,7 @@ def main(cfg: DictConfig):
         val_check_interval=1.0,
         callbacks=[eval_callback],
         logger=logger,
+        strategy="ddp",  # Add this to use DDP for multi-GPU training
     )
     trainer.fit(lit_model, data)
 

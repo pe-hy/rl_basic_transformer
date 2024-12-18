@@ -1,41 +1,12 @@
 defaults:  
   - _self_  
-  - override hydra/launcher: submitit_slurm
   - override hydra/hydra_logging: disabled  
-  - override hydra/job_logging: disabled    
+  - override hydra/job_logging: disabled  
   
 hydra:  
   output_subdir: null  
   run:  
     dir: .
-  mode: MULTIRUN  # Moved this up one level
-  sweeper:
-    params:
-      model.n_layer: 4,6,8
-      model:
-        - n_embd: 32
-          n_head: 2
-        - n_embd: 32
-          n_head: 4
-        - n_embd: 64
-          n_head: 2
-        - n_embd: 64
-          n_head: 4
-  launcher:
-    submitit_folder: ${hydra.runtime.output_dir}/.submitit/%j
-    timeout_min: 2880  # 24 hours
-    cpus_per_task: 8
-    gpus_per_node: 4
-    tasks_per_node: 4
-    mem_gb: 128
-    nodes: 3
-    name: ${model.name}
-    partition: "gpu"
-    comment: null
-    constraint: null
-    max_num_timeout: 0
-    array_parallelism: 4
-
 
 tok_data:
   train_file: "../data/sos/train1_b4_t30_n200000_dfs.json"
@@ -65,7 +36,7 @@ model:
   bos_id: 395
   eos_id: 399
   checkpoint_dir: "model/${dl_model.full_path}"
-  tokenizer_path: "tokenizer"
+  tokenizer_path: "model/${dl_model.full_path}"
 
 eval:
   config_path: "${model.checkpoint_dir}/model_config.json"

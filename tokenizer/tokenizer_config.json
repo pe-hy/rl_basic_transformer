@@ -1,0 +1,8 @@
+{
+  "add_prefix_space": false,
+  "add_bos_token": true,
+  "bos_token": "[BOS]",
+  "eos_token": "[EOS]",
+  "tokenizer_class": "GPTNeoXTokenizer",
+  "unk_token": "[UNK]"
+}
