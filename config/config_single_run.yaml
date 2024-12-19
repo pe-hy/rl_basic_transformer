@@ -1,0 +1,69 @@
+defaults:  
+  - _self_  
+  - override hydra/launcher: submitit_slurm
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled    
+  
+hydra:  
+  output_subdir: null  
+  run:  
+    dir: .
+  launcher:
+    name: Pythia-14m
+    _target_: hydra_plugins.hydra_submitit_launcher.submitit_launcher.SlurmLauncher
+    submitit_folder: logs/Pythia-single/%j
+    timeout_min: 1440
+    gres: "gpu:1"          
+    tasks_per_node: 1
+    nodes: 1
+    partition: "qgpu"
+    account: "OPEN-30-4"
+    comment: null
+    constraint: null
+    max_num_timeout: 0
+
+tok_data:
+  train_file: "../data/sos/train1_b4_t30_n200000_dfs.json"
+  val_target_file: "../data/sos/val_target1_b4_t30_n200000_dfs.json"
+  val_file: "../data/sos/val1_b4_t30_n200000_dfs.json"
+  tokenizer_path: "${model.tokenizer_path}/tokenizer.json"
+
+data:
+  datapath: data
+  train_file: "sos/train1_b4_t30_n200000_dfs.json"
+  val_target_file: "sos/val_target1_b4_t30_n200000_dfs.json"
+  val_file: "sos/val1_b4_t30_n200000_dfs.json"
+  num_train: 2e5
+  num_workers: 16
+
+model:
+  name: Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs
+  batch_size: 12
+  accumulate_grad_batches: 1
+  block_size: 4096
+  epochs: 100
+  n_layer: 6
+  n_head: 4
+  n_embd: 128
+  vocab_size: 410
+  padded_vocab_size: 410
+  bos_id: 395
+  eos_id: 399
+  checkpoint_dir: "model/${dl_model.full_path}"
+  tokenizer_path: "tokenizer"
+
+eval:
+  config_path: "${model.checkpoint_dir}/model_config.json"
+  num_examples: 128
+  batch_size: 64
+  eval_interval: 1000
+  results_dir: "data/eval_results/${model.name}"
+
+dl_model:
+  model_folder: "checkpoints"
+  name: "EleutherAI/pythia-160m"
+  full_path: "${dl_model.model_folder}/${dl_model.name}/"
+
+convert_hf:
+  in_path: "temp/${model.name}"
+  out_path: "temp/hf_${model.name}"
