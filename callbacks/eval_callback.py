@@ -15,27 +15,27 @@ from litgpt.scripts.convert_lit_checkpoint import convert_lit_checkpoint
 from litgpt.utils import copy_config_files, auto_download_checkpoint
 
 
-def convert_litgpt_to_hf(cfg):
+# def convert_litgpt_to_hf(cfg):
 
-    out_dir = Path(cfg.convert_hf.out_path)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    source_dir = Path(cfg.convert_hf.in_path)
-    model_path = out_dir / "pytorch_model.bin"
-    model_path = Path(model_path)
+#     out_dir = Path(cfg.convert_hf.out_path)
+#     out_dir.mkdir(parents=True, exist_ok=True)
+#     source_dir = Path(cfg.convert_hf.in_path)
+#     model_path = out_dir / "pytorch_model.bin"
+#     model_path = Path(model_path)
 
-    copy_config_files(source_dir=source_dir, out_dir=out_dir)
-    convert_lit_checkpoint(checkpoint_dir=source_dir, output_dir=out_dir)
+#     copy_config_files(source_dir=source_dir, out_dir=out_dir)
+#     convert_lit_checkpoint(checkpoint_dir=source_dir, output_dir=out_dir)
 
-    state_dict = torch.load(out_dir / "model.pth")
-    torch.save(state_dict, model_path)
-    hf_model = AutoModelForCausalLM.from_pretrained(
-        out_dir,
-        torch_dtype=torch.bfloat16,
-        local_files_only=True,
-        state_dict=state_dict,
-        attn_implementation="flash_attention_2",
-    )
-    return hf_model
+#     state_dict = torch.load(out_dir / "model.pth")
+#     torch.save(state_dict, model_path)
+#     hf_model = AutoModelForCausalLM.from_pretrained(
+#         out_dir,
+#         torch_dtype=torch.bfloat16,
+#         local_files_only=True,
+#         state_dict=state_dict,
+#         attn_implementation="flash_attention_2",
+#     )
+#     return hf_model
 
 
 class EvalCallback(Callback):
@@ -146,7 +146,7 @@ class EvalCallback(Callback):
         print(f"\nRunning custom countdown evaluation at step {trainer.global_step}")
 
         try:
-            self.hf_model = convert_litgpt_to_hf(self.config)
+            # self.hf_model = convert_litgpt_to_hf(self.config)
             self.hf_model.cuda()
             self.hf_model.eval()
 

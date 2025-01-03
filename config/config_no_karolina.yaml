@@ -23,12 +23,12 @@ data:
   num_workers: 64
 
 model:
-  name: "Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs"
+  name: "PAST-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs"
   batch_size: 12
   accumulate_grad_batches: 1
   block_size: 4096
   epochs: 100
-  n_layer: 6
+  n_layer: 4
   n_head: 4
   n_embd: 128
   vocab_size: 410
@@ -37,6 +37,25 @@ model:
   eos_id: 399
   checkpoint_dir: "model/${dl_model.full_path}"
   tokenizer_path: "model/${dl_model.full_path}"
+  # past specific:
+  mode: absorbing
+  model: past
+  attn_sink: False
+  bias: True
+  dropout: 0
+  scale_loss: False
+  stack_enc_dec: True
+  tie_lmhead: True
+  train_mode: absorbing
+
+optim:
+  optimizer: adamw #adamw, sgd
+  learning_rate: 1e-3
+  weight_decay: 1e-4
+  betas: [0.9, 0.999]
+  warmup_pct: 0.05
+  schedule_free: False
+  grad_clip: 1
 
 eval:
   config_path: "${model.checkpoint_dir}/model_config.json"

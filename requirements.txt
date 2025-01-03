@@ -1,3 +1,5 @@
+recipe
+loguru
 submitit
 litgpt[all]
 datasets
