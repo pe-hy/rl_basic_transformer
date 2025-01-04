@@ -28,7 +28,6 @@ import os
 import getpass
 import tempfile
 
-
 from pytorch_lightning import LightningModule
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from transformers import XLNetConfig, BitsAndBytesConfig
@@ -47,12 +46,13 @@ def nearest_multiple(x):
 
 
 class PLModel(LightningModule):
-    def __init__(self, config, config_optim, **model_kwargs) -> None:
+    def __init__(self, config, config_optim, eval_fn, **model_kwargs) -> None:
         super().__init__()
         self.config = config
         self.config_optim = config_optim
         self.train_mode = config.mode
-        self.eval_fn = None
+        self.eval_fn = eval_fn
+        self.eval_mode = config.train_mode
         # Create PASTConfig from the hydra config
         past_config = PASTConfig(
             vocab_size=config.vocab_size,
@@ -104,7 +104,7 @@ class PLModel(LightningModule):
             add_dataloader_idx=False,
             sync_dist=True,
         )
-        if self.eval_fn is not None:
+        if False and self.eval_fn is not None:
             eval_dict = self.eval_fn(
                 self.model,
                 batch,
@@ -203,13 +203,16 @@ def main(cfg: DictConfig):
     #     config_optim=cfg.optim,
     #     tokenizer=tokenizer,
     # )
-    model = PLModel(config=cfg.model, config_optim=cfg.optim)
 
     datasets = get_data(cfg, tokenizer)
     datamodule = Datamodule(datasets, batch_size, num_workers, tokenizer)
     datamodule.setup()
     train_loader = datamodule.train_dataloader()
     val_loader = datamodule.val_dataloader()
+
+    model = PLModel(
+        config=cfg.model, config_optim=cfg.optim, eval_fn=datamodule.eval_fn
+    )
 
     # data.connect(max_seq_length=cfg.model.block_size)
 
