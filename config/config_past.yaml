@@ -9,18 +9,18 @@ hydra:
     dir: .
 
 tok_data:
-  train_file: "../data/sos/train1_b4_t30_n500000_dfs.json"
-  val_target_file: "../data/sos/val_target1_b4_t30_n500000_dfs.json"
-  val_file: "../data/sos/val1_b4_t30_n500000_dfs.json"
+  train_file: "../data/sos_filtered/train1_b4_t30_n500000_dfs_filtered.json"
+  val_target_file: "../data/sos_filtered/val_target1_b4_t30_n500000_dfs_filtered.json"
+  val_file: "../data/sos_filtered/val1_b4_t30_n500000_dfs_filtered.json"
   tokenizer_path: "tokenizer/tokenizer.json"
 
 data:
   datapath: data
-  train_file: "sos/train1_b4_t30_n500000_dfs.json"
-  val_target_file: "sos/val_target1_b4_t30_n500000_dfs.json"
-  val_file: "sos/val1_b4_t30_n500000_dfs.json"
+  train_file: "sos_filtered/train1_b4_t30_n500000_dfs_filtered.json"
+  val_target_file: "sos_filtered/val_target1_b4_t30_n500000_dfs_filtered.json"
+  val_file: "sos_filtered/val1_b4_t30_n500000_dfs_filtered.json"
   num_train: 2e5
-  num_val: 1e3
+  num_val: 48 # lost some during filtration, was 1k
   num_workers: 64
 
 model:
