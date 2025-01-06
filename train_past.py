@@ -46,13 +46,16 @@ def nearest_multiple(x):
 
 
 class PLModel(LightningModule):
-    def __init__(self, config, config_optim, eval_fn, **model_kwargs) -> None:
+    def __init__(
+        self, tokenizer, config, config_optim, eval_fn, **model_kwargs
+    ) -> None:
         super().__init__()
         self.config = config
         self.config_optim = config_optim
         self.train_mode = config.mode
         self.eval_fn = eval_fn
         self.eval_mode = config.train_mode
+        self.tokenizer = tokenizer
         # Create PASTConfig from the hydra config
         past_config = PASTConfig(
             vocab_size=config.vocab_size,
@@ -89,10 +92,6 @@ class PLModel(LightningModule):
         return out.loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        # print("Batch type:", type(batch))  # Debug print
-        # print(
-        #     "Batch keys:", batch.keys() if isinstance(batch, dict) else "Not a dict"
-        # )  # Debug print
         bsz = batch["input_ids"].size(0)
         out = self(batch)
         metric_name = f"val/loss/{dataloader_idx}" if dataloader_idx > 0 else "val/loss"
@@ -104,35 +103,54 @@ class PLModel(LightningModule):
             add_dataloader_idx=False,
             sync_dist=True,
         )
-        if False and self.eval_fn is not None:
+
+        if self.eval_fn is not None:
+            # Get current step from the trainer
+            current_step = self.trainer.global_step
+
+            # Call eval_fn with the required parameters
             eval_dict = self.eval_fn(
                 self.model,
+                self.tokenizer,  # Added tokenizer
                 batch,
+                current_step,  # Added current_step
                 dataloader_idx=dataloader_idx,
                 return_samples=batch_idx == 0,
                 mode=self.eval_mode,
             )
-            for k, v in eval_dict["metrics"].items():
-                k = f"{k}/{dataloader_idx}"
-                prog = "acc" in k
-                self.log(
-                    k,
-                    v,
-                    prog_bar=prog,
-                    batch_size=bsz,
-                    add_dataloader_idx=False,
-                    sync_dist=True,
-                )
+
+            # Log metrics
+            for (
+                k,
+                v,
+            ) in (
+                eval_dict.items()
+            ):  # Changed from eval_dict["metrics"] since res structure changed
+                if not isinstance(v, dict):  # Only log non-dict values
+                    k = f"{k}/{dataloader_idx}"
+                    prog = "acc" in k.lower()
+                    self.log(
+                        k,
+                        v,
+                        prog_bar=prog,
+                        batch_size=bsz,
+                        add_dataloader_idx=False,
+                        sync_dist=True,
+                    )
+
+            # Handle sample logging if available
             if hasattr(self.logger, "log_text") and batch_idx == 0:
                 filtered = [k for k in eval_dict.keys() if k.startswith("SAVE_")]
-                columns = [k.strip("SAVE_") for k in filtered]
-                data = [eval_dict[k] for k in filtered]
-                data = list(zip(*data))
-                self.logger.log_text(
-                    f"samples/{dataloader_idx}",
-                    data=data,
-                    columns=columns,
-                )
+                if filtered:  # Only process if there are SAVE_ keys
+                    columns = [k.strip("SAVE_") for k in filtered]
+                    data = [eval_dict[k] for k in filtered]
+                    data = list(zip(*data))
+                    self.logger.log_text(
+                        f"samples/{dataloader_idx}",
+                        data=data,
+                        columns=columns,
+                    )
+
         return out.loss
 
     def configure_optimizers(self):
@@ -205,30 +223,22 @@ def main(cfg: DictConfig):
     # )
 
     datasets = get_data(cfg, tokenizer)
-    datamodule = Datamodule(datasets, batch_size, num_workers, tokenizer)
+    datamodule = Datamodule(datasets, batch_size, num_workers, tokenizer, cfg)
     datamodule.setup()
     train_loader = datamodule.train_dataloader()
     val_loader = datamodule.val_dataloader()
 
     model = PLModel(
-        config=cfg.model, config_optim=cfg.optim, eval_fn=datamodule.eval_fn
+        tokenizer,
+        config=cfg.model,
+        config_optim=cfg.optim,
+        eval_fn=datamodule.eval_fn,
     )
 
     # data.connect(max_seq_length=cfg.model.block_size)
 
     logger = WandbLogger(
         project="sos", name=f"{cfg.model.name}_past", config=wandb_config
-    )
-
-    eval_callback = EvalCallback(
-        data_dir=cfg.data.datapath,
-        eval_data=cfg.data.val_file,
-        tokenizer=tokenizer,
-        num_examples=cfg.eval.num_examples,
-        batch_size=cfg.eval.batch_size,
-        config=cfg,
-        eval_interval=cfg.eval.eval_interval,
-        save_path=cfg.convert_hf.in_path,
     )
 
     trainer = Trainer(
@@ -238,7 +248,7 @@ def main(cfg: DictConfig):
         accumulate_grad_batches=accumulate_grad_batches,
         precision="bf16-true",
         val_check_interval=1.0,
-        callbacks=[LearningRateMonitor()],  # TODO eval_callback
+        callbacks=[LearningRateMonitor()],
         logger=logger,
     )
     trainer.fit(model, train_loader, val_loader, ckpt_path=ckpt_path)

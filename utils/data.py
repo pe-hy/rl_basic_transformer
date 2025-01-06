@@ -11,20 +11,43 @@ from transformers import PreTrainedTokenizerFast
 from hydra.utils import get_original_cwd, to_absolute_path
 from typing import Optional, Union
 from litgpt.tokenizer import Tokenizer
-
+from utils.countdown_utils import *
 import os
+import numpy as np
+import pandas as pd
+import datetime
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class Datamodule(LightningDataModule):
-    def __init__(self, dataset, batch_size, num_workers, tokenizer):
+    def __init__(self, dataset, batch_size, num_workers, tokenizer, config):
         super().__init__()
         self.dataset = dataset
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.tokenizer = tokenizer
         self.return_prediction_mask = True
+        self.config = config
+        self.num_examples = config.eval.num_examples
+        self.eval_data = config.data.val_file
+
+        self.results_df = pd.DataFrame(
+            columns=[
+                "step",
+                "timestamp",
+                "average_rating",
+                "average_true_rating",
+                "accuracy",
+                "true_accuracy",
+                "predictions",
+            ]
+        )
+        self.csv_path = os.path.join(config.eval.results_dir, "eval_results.csv")
+        if os.path.exists(self.csv_path):
+            self.results_df = pd.read_csv(self.csv_path)
+
+        self.last_eval_step = None
 
     def setup(self, stage=None):
         self.train_dataset = self.dataset["train"]
@@ -90,7 +113,6 @@ class Datamodule(LightningDataModule):
         attn = attn.clone()
         column = range(prefix.shape[0])
         for idx in range(ans.shape[1]):
-            print(idx)
             # if the ans is masked replaced with model output
             old_values = ans[column, idx]
             column_attn = attn[column, idx]
@@ -111,29 +133,109 @@ class Datamodule(LightningDataModule):
         return ans
 
     def eval_fn(
-        self, model, batch, dataloader_idx=0, return_samples=False, **model_kwargs
+        self,
+        model,
+        tokenizer,
+        batch,
+        current_step,  # Added this parameter to replace trainer.global_step
+        dataloader_idx=0,
+        return_samples=False,
+        **model_kwargs,
     ):
         """runs some evaluation based on which data_loader. returns a dict containing
         at least the 'metrics' key whose value is a dict of metrics.
         can also return keys for generated text samples"""
-        # get accuracies based on the model's output
-        # 1. find prefix to condition the model
-        # 2. model.generate(based on prefix)
-        # 3. check per token accuracy for the suffix
-        # val_set_name = list(self.val.keys())[dataloader_idx]
-        # val_set_name = "val"
         prefix, prefix_attn = self._eval_get_prefix(batch)
         ans = self._eval_get_model_answers(prefix, prefix_attn, model, **model_kwargs)
-        attn = batch["attention_mask"]
-        # suffix_attn = attn.clone()
-        # # convert to 1 for each token in the suffix
-        # suffix_attn = suffix_attn.where(prefix_attn == 0, 0)
+
+        output_text = tokenizer.batch_decode(ans, skip_special_tokens=False)
+        predictions = output_text
+        tokenizer.padding_side = "left"
+
+        # Calculate metrics
+        pred_ratings = []
+        true_rating = []
+        pred_reasons = []
+
+        for i in range(len(predictions)):
+            rating, reason = metric_fn(
+                predictions[i].split(self.tokenizer.bos_token)[1], mode="sft"
+            )
+            tr, _ = metric_fn(f"{self.raw_val_data[i]['search_path']}", mode="sft")
+            pred_ratings.append(rating)
+            true_rating.append(tr)
+            pred_reasons.append(reason)
+
+        pred_ratings = np.array(pred_ratings)
+        avg_rating = float(np.mean(pred_ratings))
+        avg_true_rating = float(np.mean(true_rating))
+        accuracy = float(np.mean([r > 0 for r in pred_ratings]))
+        true_accuracy = float(np.mean([r > 0 for r in true_rating]))
+
+        # Save detailed results
+        eval_dir = os.path.join(self.config.eval.results_dir, f"step_{current_step}")
+
+        os.makedirs(eval_dir, exist_ok=True)
+
+        results_file = os.path.join(
+            eval_dir,
+            f"results_{self.num_examples}_{self.eval_data.replace('/','_')}",
+        )
+        with open(results_file, "w") as f:
+            json.dump(
+                {
+                    "trajectories": predictions,
+                    "ratings": pred_ratings.tolist(),
+                    "reasons": pred_reasons,
+                },
+                f,
+                indent=4,
+            )
+
+        self.last_eval_step = current_step
+
         res = {
-            "metrics": {
-                f"acc": 0,
-                f"full_acc": 0,
-            }
+            "countdown_eval/average_rating": avg_rating,
+            "countdown_eval/average_true_rating": avg_true_rating,
+            "countdown_eval/accuracy": accuracy,
+            "countdown_eval/true_accuracy": true_accuracy,
         }
+
+        # Save to CSV
+        if not any(self.results_df["step"] == current_step):
+            new_row = pd.DataFrame(
+                [
+                    {
+                        "step": current_step,
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "average_rating": avg_rating,
+                        "average_true_rating": avg_true_rating,
+                        "accuracy": accuracy,
+                        "true_accuracy": true_accuracy,
+                        "predictions": json.dumps(predictions),
+                    }
+                ]
+            )
+
+            self.results_df = pd.concat([self.results_df, new_row], ignore_index=True)
+            self.results_df.to_csv(self.csv_path, index=False)
+
+        # Print results summary
+        print("\nResults Summary:")
+        print(f"Average rating: {avg_rating}")
+        print(f"Average true rating: {avg_true_rating}")
+        print(f"Accuracy: {accuracy}")
+        print(f"True Accuracy: {true_accuracy}")
+
+        if return_samples:
+            res.update(
+                SAVE_generated=self.tokenizer.batch_decode(ans.tolist()),
+                SAVE_truth=self.tokenizer.batch_decode(batch["input_ids"].tolist()),
+                _generated_ids=ans,
+                _prefix_ids=prefix,
+                _prefix_attn=prefix_attn,
+                _truth_ids=batch["input_ids"],
+            )
         return res
 
     def connect(self, max_seq_length: Optional[int] = None) -> None:
