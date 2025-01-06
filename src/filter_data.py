@@ -60,7 +60,7 @@ def get_data_with_filtering(cfg: DictConfig, tokenizer):
     stats = {}
     filtered_datasets = {}
 
-    output_dir = to_absolute_path("../data/sos_filtered")
+    output_dir = to_absolute_path("data/sos_filtered")
     os.makedirs(output_dir, exist_ok=True)
 
     for split in tokenized_dataset.keys():
