@@ -94,6 +94,8 @@ class PLModel(LightningModule):
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         bsz = batch["input_ids"].size(0)
         out = self(batch)
+
+        # Log loss
         metric_name = f"val/loss/{dataloader_idx}" if dataloader_idx > 0 else "val/loss"
         self.log(
             metric_name,
@@ -105,28 +107,19 @@ class PLModel(LightningModule):
         )
 
         if self.eval_fn is not None:
-            # Get current step from the trainer
-            current_step = self.trainer.global_step
-
-            # Call eval_fn with the required parameters
+            # Get evaluation metrics
             eval_dict = self.eval_fn(
                 self.model,
-                self.tokenizer,  # Added tokenizer
                 batch,
-                current_step,  # Added current_step
+                self.trainer.global_step,
                 dataloader_idx=dataloader_idx,
                 return_samples=batch_idx == 0,
                 mode=self.eval_mode,
             )
 
-            # Log metrics
-            for (
-                k,
-                v,
-            ) in (
-                eval_dict.items()
-            ):  # Changed from eval_dict["metrics"] since res structure changed
-                if not isinstance(v, dict):  # Only log non-dict values
+            # Log numeric metrics only
+            for k, v in eval_dict.items():
+                if not k.startswith("SAVE_") and not isinstance(v, (dict, list, str)):
                     k = f"{k}/{dataloader_idx}"
                     prog = "acc" in k.lower()
                     self.log(
@@ -138,17 +131,16 @@ class PLModel(LightningModule):
                         sync_dist=True,
                     )
 
-            # Handle sample logging if available
+            # Handle text samples separately
             if hasattr(self.logger, "log_text") and batch_idx == 0:
-                filtered = [k for k in eval_dict.keys() if k.startswith("SAVE_")]
-                if filtered:  # Only process if there are SAVE_ keys
-                    columns = [k.strip("SAVE_") for k in filtered]
-                    data = [eval_dict[k] for k in filtered]
-                    data = list(zip(*data))
+                text_data = {
+                    k: v for k, v in eval_dict.items() if k.startswith("SAVE_")
+                }
+                if text_data:
                     self.logger.log_text(
                         f"samples/{dataloader_idx}",
-                        data=data,
-                        columns=columns,
+                        columns=list(text_data.keys()),
+                        data=list(zip(*text_data.values())),
                     )
 
         return out.loss
@@ -194,12 +186,9 @@ class PLModel(LightningModule):
         return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
 
 
-@hydra.main(config_path="config", config_name="config_no_karolina", version_base=None)
+@hydra.main(config_path="config", config_name="config_past", version_base=None)
 def main(cfg: DictConfig):
     conf, _ = hf_config.get_configs(cfg)
-    ckpt_path = (
-        cfg.convert_hf.in_path if os.path.exists(cfg.convert_hf.in_path) else None
-    )
     wandb_config = OmegaConf.to_container(cfg, resolve=True)
 
     print("Current model configuration:")
@@ -250,8 +239,9 @@ def main(cfg: DictConfig):
         val_check_interval=1.0,
         callbacks=[LearningRateMonitor()],
         logger=logger,
+        default_root_dir=f"{'temp/' + cfg.model.name}",
     )
-    trainer.fit(model, train_loader, val_loader, ckpt_path=ckpt_path)
+    trainer.fit(model, train_loader, val_loader)
 
 
 if __name__ == "__main__":

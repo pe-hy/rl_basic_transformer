@@ -9,16 +9,16 @@ hydra:
     dir: .
 
 tok_data:
-  train_file: "../data/sos/train1_b4_t30_n200000_dfs.json"
-  val_target_file: "../data/sos/val_target1_b4_t30_n200000_dfs.json"
-  val_file: "../data/sos/val1_b4_t30_n200000_dfs.json"
-  tokenizer_path: "${model.tokenizer_path}/tokenizer.json"
+  train_file: "../data/sos/train1_b4_t30_n500000_dfs.json"
+  val_target_file: "../data/sos/val_target1_b4_t30_n500000_dfs.json"
+  val_file: "../data/sos/val1_b4_t30_n500000_dfs.json"
+  tokenizer_path: "tokenizer/tokenizer.json"
 
 data:
   datapath: data
-  train_file: "sos/train1_b4_t30_n200000_dfs.json"
-  val_target_file: "sos/val_target1_b4_t30_n200000_dfs.json"
-  val_file: "sos/val1_b4_t30_n200000_dfs.json"
+  train_file: "sos/train1_b4_t30_n500000_dfs.json"
+  val_target_file: "sos/val_target1_b4_t30_n500000_dfs.json"
+  val_file: "sos/val1_b4_t30_n500000_dfs.json"
   num_train: 2e5
   num_val: 1e3
   num_workers: 64
@@ -29,13 +29,13 @@ model:
   accumulate_grad_batches: 1
   block_size: 4096
   epochs: 100
-  n_layer: 4
+  n_layer: 6
   n_head: 4
   n_embd: 128
   vocab_size: 410
   padded_vocab_size: 410
-  bos_id: 395
-  eos_id: 399
+  bos_id: 403
+  eos_id: 407
   checkpoint_dir: "model/${dl_model.full_path}"
   tokenizer_path: "model/${dl_model.full_path}"
   # past specific:
@@ -62,7 +62,7 @@ eval:
   config_path: "${model.checkpoint_dir}/model_config.json"
   num_examples: 128
   batch_size: 64
-  eval_interval: 10
+  eval_interval: 1000 # unused
   results_dir: "data/eval_results/${model.name}"
 
 dl_model:

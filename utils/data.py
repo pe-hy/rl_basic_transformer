@@ -15,7 +15,7 @@ from utils.countdown_utils import *
 import os
 import numpy as np
 import pandas as pd
-import datetime
+from datetime import datetime
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -30,7 +30,6 @@ class Datamodule(LightningDataModule):
         self.return_prediction_mask = True
         self.config = config
         self.num_examples = config.eval.num_examples
-        self.eval_data = config.data.val_file
 
         self.results_df = pd.DataFrame(
             columns=[
@@ -135,7 +134,6 @@ class Datamodule(LightningDataModule):
     def eval_fn(
         self,
         model,
-        tokenizer,
         batch,
         current_step,  # Added this parameter to replace trainer.global_step
         dataloader_idx=0,
@@ -148,9 +146,11 @@ class Datamodule(LightningDataModule):
         prefix, prefix_attn = self._eval_get_prefix(batch)
         ans = self._eval_get_model_answers(prefix, prefix_attn, model, **model_kwargs)
 
-        output_text = tokenizer.batch_decode(ans, skip_special_tokens=False)
-        predictions = output_text
-        tokenizer.padding_side = "left"
+        predictions = self.tokenizer.batch_decode(ans, skip_special_tokens=False)
+        targets = self.tokenizer.batch_decode(
+            batch["input_ids"], skip_special_tokens=False
+        )
+        self.tokenizer.padding_side = "left"
 
         # Calculate metrics
         pred_ratings = []
@@ -158,10 +158,8 @@ class Datamodule(LightningDataModule):
         pred_reasons = []
 
         for i in range(len(predictions)):
-            rating, reason = metric_fn(
-                predictions[i].split(self.tokenizer.bos_token)[1], mode="sft"
-            )
-            tr, _ = metric_fn(f"{self.raw_val_data[i]['search_path']}", mode="sft")
+            rating, reason = metric_fn(predictions[i], mode="sft")
+            tr, _ = metric_fn(targets[i], mode="sft")
             pred_ratings.append(rating)
             true_rating.append(tr)
             pred_reasons.append(reason)
@@ -179,7 +177,7 @@ class Datamodule(LightningDataModule):
 
         results_file = os.path.join(
             eval_dir,
-            f"results_{self.num_examples}_{self.eval_data.replace('/','_')}",
+            f"results_{self.num_examples}",
         )
         with open(results_file, "w") as f:
             json.dump(
@@ -229,12 +227,14 @@ class Datamodule(LightningDataModule):
 
         if return_samples:
             res.update(
-                SAVE_generated=self.tokenizer.batch_decode(ans.tolist()),
-                SAVE_truth=self.tokenizer.batch_decode(batch["input_ids"].tolist()),
-                _generated_ids=ans,
-                _prefix_ids=prefix,
-                _prefix_attn=prefix_attn,
-                _truth_ids=batch["input_ids"],
+                SAVE_generated="\n".join(self.tokenizer.batch_decode(ans.tolist())),
+                SAVE_truth="\n".join(
+                    self.tokenizer.batch_decode(batch["input_ids"].tolist())
+                ),
+                _generated_ids=ans.tolist(),
+                _prefix_ids=prefix.tolist(),
+                _prefix_attn=prefix_attn.tolist(),
+                _truth_ids=batch["input_ids"].tolist(),
             )
         return res
 
