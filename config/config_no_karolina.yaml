@@ -19,7 +19,7 @@ data:
   train_file: "sos/train1_b4_t30_n200000_dfs.json"
   val_target_file: "sos/val_target1_b4_t30_n200000_dfs.json"
   val_file: "sos/val1_b4_t30_n200000_dfs.json"
-  num_train: 2e5
+  num_train: 2e2
   num_workers: 64
 
 model:
@@ -42,7 +42,7 @@ eval:
   config_path: "${model.checkpoint_dir}/model_config.json"
   num_examples: 128
   batch_size: 64
-  eval_interval: 1000
+  eval_interval: 10
   results_dir: "data/eval_results/${model.name}"
 
 dl_model:
