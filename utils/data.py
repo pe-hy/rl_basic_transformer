@@ -21,10 +21,11 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class Datamodule(LightningDataModule):
-    def __init__(self, dataset, batch_size, num_workers, tokenizer, config):
+    def __init__(self, dataset, batch_size, val_bsz, num_workers, tokenizer, config):
         super().__init__()
         self.dataset = dataset
         self.batch_size = batch_size
+        self.val_batch_size = val_bsz
         self.num_workers = num_workers
         self.tokenizer = tokenizer
         self.return_prediction_mask = True
@@ -146,6 +147,11 @@ class Datamodule(LightningDataModule):
         prefix, prefix_attn = self._eval_get_prefix(batch)
         ans = self._eval_get_model_answers(prefix, prefix_attn, model, **model_kwargs)
 
+        # torch.save( # for debugging metric_fn
+        #     {"model_answers": ans, "input_ids": batch["input_ids"]},
+        #     f"tensors_{current_step}.pt",
+        # )
+
         predictions = self.tokenizer.batch_decode(ans, skip_special_tokens=False)
         targets = self.tokenizer.batch_decode(
             batch["input_ids"], skip_special_tokens=False
@@ -158,8 +164,17 @@ class Datamodule(LightningDataModule):
         pred_reasons = []
 
         for i in range(len(predictions)):
-            rating, reason = metric_fn(predictions[i], mode="sft")
-            tr, _ = metric_fn(targets[i], mode="sft")
+            rating, reason = metric_fn(
+                predictions[i]
+                .split(self.tokenizer.bos_token)[1]
+                .split(self.tokenizer.eos_token)[0],
+                mode="sft",
+            )
+            tr, _ = metric_fn(
+                targets[i]
+                .split(self.tokenizer.bos_token)[1]
+                .split(self.tokenizer.eos_token)[0]
+            )
             pred_ratings.append(rating)
             true_rating.append(tr)
             pred_reasons.append(reason)
@@ -254,7 +269,7 @@ class Datamodule(LightningDataModule):
     def val_dataloader(self):
         return DataLoader(
             self.val_dataset,
-            batch_size=self.batch_size,
+            batch_size=self.val_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=False,
@@ -264,7 +279,7 @@ class Datamodule(LightningDataModule):
     def test_dataloader(self):
         return DataLoader(
             self.test_dataset,
-            batch_size=self.batch_size,
+            batch_size=self.val_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=False,

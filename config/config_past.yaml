@@ -25,7 +25,7 @@ data:
 
 model:
   name: "PAST-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs"
-  batch_size: 12
+  batch_size: 24
   accumulate_grad_batches: 1
   block_size: 4096
   epochs: 100
@@ -59,7 +59,7 @@ optim:
   grad_clip: 1
 
 eval:
-  num_examples: 128
-  batch_size: 64
+  num_examples: 48
+  batch_size: 48
   eval_interval: 1000 # unused
   results_dir: "data/eval_results/${model.name}"

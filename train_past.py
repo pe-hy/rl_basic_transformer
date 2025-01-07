@@ -120,7 +120,7 @@ class PLModel(LightningModule):
             # Log numeric metrics only
             for k, v in eval_dict.items():
                 if not k.startswith("SAVE_") and not isinstance(v, (dict, list, str)):
-                    k = f"{k}/{dataloader_idx}"
+                    k = f"{k}"
                     prog = "acc" in k.lower()
                     self.log(
                         k,
@@ -198,6 +198,7 @@ def main(cfg: DictConfig):
     print(f"Model name: {cfg.model.name}")
 
     batch_size = cfg.model.batch_size
+    val_bsz = cfg.eval.batch_size
     accumulate_grad_batches = cfg.model.accumulate_grad_batches
     num_workers = cfg.data.num_workers
     tokenizer = get_tokenizer(cfg.tok_data)
@@ -212,7 +213,8 @@ def main(cfg: DictConfig):
     # )
 
     datasets = get_data(cfg, tokenizer)
-    datamodule = Datamodule(datasets, batch_size, num_workers, tokenizer, cfg)
+    val_bsz = cfg.eval.batch_size
+    datamodule = Datamodule(datasets, batch_size, val_bsz, num_workers, tokenizer, cfg)
     datamodule.setup()
     train_loader = datamodule.train_dataloader()
     val_loader = datamodule.val_dataloader()
@@ -230,6 +232,14 @@ def main(cfg: DictConfig):
         project="sos", name=f"{cfg.model.name}_past", config=wandb_config
     )
 
+    checkpoint_callback = ModelCheckpoint(
+        monitor="countdown_eval/accuracy",  # what metric to track
+        dirpath=f"temp/{cfg.model.name}/checkpoints",  # where to save checkpoints
+        filename="{epoch:02d}-{val_loss:.3f}",  # how to name checkpoints
+        save_top_k=2,  # save top 3 models
+        mode="max",  # lower val_loss is better
+    )
+
     trainer = Trainer(
         devices=1,
         accelerator="cuda",
@@ -237,7 +247,7 @@ def main(cfg: DictConfig):
         accumulate_grad_batches=accumulate_grad_batches,
         precision="bf16-true",
         val_check_interval=1.0,
-        callbacks=[LearningRateMonitor()],
+        callbacks=[LearningRateMonitor(), checkpoint_callback],
         logger=logger,
         default_root_dir=f"{'temp/' + cfg.model.name}",
     )
