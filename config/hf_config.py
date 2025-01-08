@@ -1,6 +1,7 @@
 from litgpt.config import configs, Config, name_to_config
 from omegaconf import DictConfig, OmegaConf
 
+
 def get_configs(cfg: DictConfig):
     conf = Config(
         **dict(

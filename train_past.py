@@ -9,7 +9,6 @@ import hydra
 from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig, OmegaConf
 from callbacks.eval_callback import EvalCallback
-from callbacks.save_callback import SaveBeforeEvalCallback
 from config import hf_config
 from litgpt.config import configs, Config, name_to_config
 from litgpt.model import GPT
@@ -239,6 +238,9 @@ def main(cfg: DictConfig):
         save_top_k=2,  # save top 3 models
         mode="max",  # lower val_loss is better
     )
+
+    total_params = sum(p.numel() for p in model.parameters())
+    print("total number of params:", total_params)
 
     trainer = Trainer(
         devices=1,

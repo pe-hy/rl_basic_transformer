@@ -48,7 +48,7 @@ class EvalCallback(Callback):
         batch_size=64,
         save_path=None,
         config=None,
-        eval_interval=1000,
+        eval_interval=1,
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -61,11 +61,19 @@ class EvalCallback(Callback):
         self.hf_model = None
         self.eval_interval = eval_interval
         self.save_path = save_path
+        self.last_eval_epoch = -1
 
         # Load evaluation data once
         data_file = os.path.join(self.data_dir, self.eval_data)
-        with open(data_file, "r") as json_file:
-            self.data = json.load(json_file)
+        self.data = []
+        with open(data_file, "r") as f:
+            for line in f:
+                if line.strip():  # Skip empty lines
+                    try:
+                        self.data.append(json.loads(line))
+                    except json.JSONDecodeError as e:
+                        print(f"Error parsing line: {e}")
+                        continue
 
         # Create results directory if it doesn't exist
         self.results_dir = self.config.eval.results_dir
@@ -130,11 +138,11 @@ class EvalCallback(Callback):
 
         return output_texts_concat
 
-    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
-        # Only run evaluation at specified intervals and if we haven't evaluated at this step
+    def on_train_epoch_end(self, trainer, pl_module):
+        # Only run evaluation at specified epoch intervals and if we haven't evaluated
         if (
-            trainer.global_step % self.eval_interval == 0
-            and trainer.global_step > self.last_eval_step
+            trainer.current_epoch % self.eval_interval == 0
+            and trainer.current_epoch > self.last_eval_epoch  # Changed from step
             and trainer.is_global_zero
         ):
             print(f"Saving model before evaluation...")
@@ -143,10 +151,12 @@ class EvalCallback(Callback):
             self.run_evaluation(trainer, pl_module)
 
     def run_evaluation(self, trainer, pl_module):
-        print(f"\nRunning custom countdown evaluation at step {trainer.global_step}")
+        print(
+            f"\nRunning custom countdown evaluation at epoch {trainer.current_epoch}"
+        )  # Changed from step
 
         try:
-            # self.hf_model = convert_litgpt_to_hf(self.config)
+            self.hf_model = convert_litgpt_to_hf(self.config)
             self.hf_model.cuda()
             self.hf_model.eval()
 
@@ -156,16 +166,12 @@ class EvalCallback(Callback):
                 + f"S {sample['target']} [ {' '.join(map(str,sample['nums']))} ] ,"
                 for sample in self.data[: self.num_examples]
             ]
-            len_nums = [
-                len(sample["nums"]) for sample in self.data[: self.num_examples]
-            ]
-            data_4 = [d for d, l in zip(test_prompts, len_nums) if l == 4]
 
             # Get predictions
             predictions = self.eval_ll(
                 self.hf_model,
                 self.tokenizer,
-                data_4,
+                test_prompts,
                 batch_size=self.batch_size,
                 context_len=4096,
                 temperature=0.0,
@@ -179,7 +185,10 @@ class EvalCallback(Callback):
 
             for i in range(len(predictions)):
                 rating, reason = metric_fn(
-                    predictions[i].split(self.tokenizer.bos_token)[1], mode="sft"
+                    predictions[i]
+                    .split(self.tokenizer.bos_token)[1]
+                    .split(self.tokenizer.eos_token)[0],
+                    mode="sft",
                 )
                 tr, _ = metric_fn(f"{self.data[i]['search_path']}", mode="sft")
                 pred_ratings.append(rating)

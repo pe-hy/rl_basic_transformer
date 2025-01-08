@@ -9,45 +9,33 @@ hydra:
     dir: .
 
 tok_data:
-  train_file: "../data/sos/train1_b4_t30_n500000_dfs.json"
-  val_target_file: "../data/sos/val_target1_b4_t30_n500000_dfs.json"
-  val_file: "../data/sos/val1_b4_t30_n500000_dfs.json"
+  train_file: "../data/sos_filtered/train1_b4_t30_n500000_dfs_filtered.json"
+  val_target_file: "../data/sos_filtered/val_target1_b4_t30_n500000_dfs_filtered.json"
+  val_file: "../data/sos_filtered/val1_b4_t30_n500000_dfs_filtered.json"
   tokenizer_path: "tokenizer/tokenizer.json"
 
 data:
   datapath: data
-  train_file: "sos/train1_b4_t30_n500000_dfs.json"
-  val_target_file: "sos/val_target1_b4_t30_n500000_dfs.json"
-  val_file: "sos/val1_b4_t30_n500000_dfs.json"
+  train_file: "sos_filtered/train1_b4_t30_n500000_dfs_filtered.json"
+  val_target_file: "sos_filtered/val_target1_b4_t30_n500000_dfs_filtered.json"
+  val_file: "sos_filtered/val1_b4_t30_n500000_dfs_filtered.json"
   num_train: 2e5
-  num_val: 1e3
+  num_val: 48
   num_workers: 64
 
 model:
-  name: "PAST-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs"
-  batch_size: 12
+  name: "Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs"
+  batch_size: 24
   accumulate_grad_batches: 1
   block_size: 4096
   epochs: 100
-  n_layer: 6
-  n_head: 4
+  n_layer: 12
+  n_head: 8
   n_embd: 128
   vocab_size: 410
   padded_vocab_size: 410
   bos_id: 403
   eos_id: 407
-  checkpoint_dir: "model/${dl_model.full_path}"
-  tokenizer_path: "model/${dl_model.full_path}"
-  # past specific:
-  mode: absorbing
-  model: past
-  attn_sink: False
-  bias: True
-  dropout: 0
-  scale_loss: False
-  stack_enc_dec: True
-  tie_lmhead: True
-  train_mode: absorbing
 
 optim:
   optimizer: adamw #adamw, sgd
@@ -59,16 +47,10 @@ optim:
   grad_clip: 1
 
 eval:
-  config_path: "${model.checkpoint_dir}/model_config.json"
-  num_examples: 128
-  batch_size: 64
-  eval_interval: 1000 # unused
+  num_examples: 48
+  batch_size: 48
+  eval_interval: 1 # epoch
   results_dir: "data/eval_results/${model.name}"
-
-dl_model:
-  model_folder: "checkpoints"
-  name: "EleutherAI/pythia-160m"
-  full_path: "${dl_model.model_folder}/${dl_model.name}/"
 
 convert_hf:
   in_path: "temp/${model.name}"

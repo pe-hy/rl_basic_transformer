@@ -4,12 +4,12 @@ import torch
 from litgpt import LLM
 from litgpt.data import Alpaca2k
 import lightning as L
-from utils.data import *
+from utils.data_pythia import *
 import hydra
 from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig, OmegaConf
 from callbacks.eval_callback import EvalCallback
-from callbacks.save_callback import SaveBeforeEvalCallback
+from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 from config import hf_config
 from litgpt.config import configs, Config, name_to_config
 from litgpt.model import GPT
@@ -112,6 +112,14 @@ def main(cfg: DictConfig):
 
     logger = WandbLogger(project="sos", name=f"{cfg.model.name}", config=wandb_config)
 
+    checkpoint_callback = ModelCheckpoint(
+        monitor="val_loss",  # what metric to track
+        dirpath=f"temp/{cfg.model.name}/checkpoints",  # where to save checkpoints
+        filename="{epoch:02d}-{val_loss:.4f}",  # how to name checkpoints
+        save_top_k=2,  # save top 3 models
+        mode="min",  # lower val_loss is better
+    )
+
     eval_callback = EvalCallback(
         data_dir=cfg.data.datapath,
         eval_data=cfg.data.val_file,
@@ -122,6 +130,8 @@ def main(cfg: DictConfig):
         eval_interval=cfg.eval.eval_interval,
         save_path=cfg.convert_hf.in_path,
     )
+    total_params = sum(p.numel() for p in model.parameters())
+    print("total number of params:", total_params)
 
     trainer = L.Trainer(
         devices=1,
@@ -130,7 +140,7 @@ def main(cfg: DictConfig):
         accumulate_grad_batches=accumulate_grad_batches,
         precision="bf16-true",
         val_check_interval=1.0,
-        callbacks=[eval_callback],
+        callbacks=[LearningRateMonitor(), checkpoint_callback, eval_callback],
         logger=logger,
     )
     trainer.fit(lit_model, data)
