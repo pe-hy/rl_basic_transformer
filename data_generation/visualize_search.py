@@ -24,14 +24,14 @@ class Visualize_search():
         self.visualize_dict = {
         'shortest_path': 
             lambda step, automaton_idx, graph, pos, ax: self.__visualize_shortest_path(step, automaton_idx, graph, pos, ax),
-        'edge_conditions_visualize': 
-            lambda step, automaton_idx, graph, pos, ax: self.__visualize_edge_conditions(step, automaton_idx, graph, pos, ax),
         'edge':
             lambda step, automaton_idx, graph, pos, ax: self.__visualize_current_edge(step, automaton_idx, graph, pos, ax),
         'states':
             lambda step, automaton_idx, graph, pos, ax: self.__visualize_current_states(step, automaton_idx, graph, pos, ax),
         'target':
-            lambda step, automaton_idx, graph, pos, ax: self.__visualize_target(step, automaton_idx, graph, pos, ax)
+            lambda step, automaton_idx, graph, pos, ax: self.__visualize_target(step, automaton_idx, graph, pos, ax),
+        'conditions':
+            lambda step, automaton_idx, graph, pos, ax: self.__visualize_conditions(step, automaton_idx, graph, pos, ax)
         }
 
         for graph_idx in range(self.graphs_number):
@@ -78,11 +78,24 @@ class Visualize_search():
                         for m, condition in enumerate(edge[2]['enabling']):
                             edge_pos = pos[edge[0]] + (pos[edge[1]] - pos[edge[0]]) * 0.5
 
+                            fontsize=14
+                            color=self.colors[condition['automata_id']]
+
+                            condition_status = self.steps[frame].get('conditions', {}).get(i, {}).get((edge[0], edge[1]), {}).get((condition['automata_id'], condition['node_id']))
+
+                            if condition_status:
+                                if condition_status == "solving":
+                                    fontsize = 28
+
+                                elif condition_status == "solved":
+                                    color = 'grey'
+                                    fontsize = 8
+
                             plt.text(edge_pos[0]+0.05*m,
                                      edge_pos[1]+0.05,
                                      f'{condition["node_id"]}',
-                                     color=self.colors[condition['automata_id']],
-                                     fontsize=14)
+                                     color=color,
+                                     fontsize=fontsize)
 
             # Visualize current step
             for item in current_step:
@@ -110,10 +123,10 @@ class Visualize_search():
                         cellColours=[top_colors],
                         cellLoc='center',
                         loc='center',
-                        bbox=[0.2*target_automaton, 0.6, 0.2, 0.5]) # prvni souradnice ovlivnuje umisteni vrchni bunky
+                        bbox=[1/self.graphs_number*target_automaton, 0.6, 1/self.graphs_number, 0.5]) # prvni souradnice ovlivnuje umisteni vrchni bunky
 
         # add text with current step number
-        ax.text(0.5, -0.5, f'Step: {frame+1}', transform=ax.transAxes,
+        ax.text(0.5, -0.5, f'Step: {frame}\nID: {self.steps[frame]["debug_ID"]}', transform=ax.transAxes,
                 fontsize=40, ha='center', va='center')
 
         # Style the tables
@@ -176,6 +189,7 @@ class Visualize_search():
                                     edge_color='blue',
                                     width=3)
                 
-    def __visualize_edge_conditions(self, step, automaton_idx, graph, pos, ax):
+    def __visualize_conditions(self, step, automaton_idx, graph, pos, ax):
+
         pass
         
