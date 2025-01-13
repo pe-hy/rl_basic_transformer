@@ -35,15 +35,6 @@ import torch
 import math
 
 
-def nearest_multiple(x):
-    if x < 128:
-        return 128
-    base = 128
-    res = base * math.ceil(x / base)
-    print(f"updating vocab size {x} to nearest multiple of {base} with {res}")
-    return res
-
-
 class PLModel(LightningModule):
     def __init__(
         self, tokenizer, config, config_optim, eval_fn, **model_kwargs
@@ -185,7 +176,7 @@ class PLModel(LightningModule):
         return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
 
 
-@hydra.main(config_path="config", config_name="config_past", version_base=None)
+@hydra.main(config_path="config", config_name="config_karolina_single_run_past", version_base=None)
 def main(cfg: DictConfig):
     conf, _ = hf_config.get_configs(cfg)
     wandb_config = OmegaConf.to_container(cfg, resolve=True)
@@ -228,12 +219,12 @@ def main(cfg: DictConfig):
     # data.connect(max_seq_length=cfg.model.block_size)
 
     logger = WandbLogger(
-        project="sos", name=f"{cfg.model.name}_past", config=wandb_config
+        project="sos", name=f"{cfg.model.name}", config=wandb_config
     )
 
     checkpoint_callback = ModelCheckpoint(
         monitor="countdown_eval/accuracy",  # what metric to track
-        dirpath=f"temp/{cfg.model.name}/checkpoints",  # where to save checkpoints
+        dirpath=f"temp/{cfg.model.name}/checkpoints/ddp/",  # where to save checkpoints
         filename="{epoch:02d}-{val_loss:.3f}",  # how to name checkpoints
         save_top_k=2,  # save top 3 models
         mode="max",  # lower val_loss is better
@@ -242,18 +233,7 @@ def main(cfg: DictConfig):
     total_params = sum(p.numel() for p in model.parameters())
     print("total number of params:", total_params)
 
-    trainer = Trainer(
-        devices=1,
-        accelerator="cuda",
-        max_epochs=cfg.model.epochs,
-        accumulate_grad_batches=accumulate_grad_batches,
-        precision="bf16-true",
-        val_check_interval=1.0,
-        callbacks=[LearningRateMonitor(), checkpoint_callback],
-        logger=logger,
-        default_root_dir=f"{'temp/' + cfg.model.name}",
-    )
-    trainer.fit(model, train_loader, val_loader)
+
 
 
 if __name__ == "__main__":

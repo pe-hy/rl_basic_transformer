@@ -1,0 +1,79 @@
+defaults:  
+  - _self_  
+  - override hydra/launcher: submitit_slurm
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled    
+  
+hydra:  
+  output_subdir: null  
+  run:  
+    dir: .
+  launcher:
+    name: PAST
+    _target_: hydra_plugins.hydra_submitit_launcher.submitit_launcher.SlurmLauncher
+    submitit_folder: logs/PAST-single/%j
+    timeout_min: 2880
+    gres: "gpu:4"          
+    tasks_per_node: 4
+    nodes: 1
+    partition: "qgpu"
+    account: "OPEN-30-4"
+    comment: null
+    constraint: null
+    max_num_timeout: 0
+
+tok_data:
+  train_file: "../data/sos_filtered/train1_b4_t30_n500000_dfs_filtered.json"
+  val_target_file: "../data/sos_filtered/val_target1_b4_t30_n500000_dfs_filtered.json"
+  val_file: "../data/sos_filtered/val1_b4_t30_n500000_dfs_filtered.json"
+  tokenizer_path: "tokenizer/tokenizer.json"
+
+data:
+  datapath: data
+  train_file: "sos_filtered/train1_b4_t30_n500000_dfs_filtered.json"
+  val_target_file: "sos_filtered/val_target1_b4_t30_n500000_dfs_filtered.json"
+  val_file: "sos_filtered/val1_b4_t30_n500000_dfs_filtered.json"
+  num_train: 2e5
+  num_val: 48 # lost some during filtration, was 1k
+  num_workers: 16
+
+model:
+  name: "PAST-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs"
+  batch_size: 24
+  accumulate_grad_batches: 1
+  block_size: 4096
+  epochs: 100
+  n_layer: 12
+  n_head: 8
+  n_embd: 256
+  vocab_size: 410
+  padded_vocab_size: 410
+  bos_id: 403
+  eos_id: 407
+  # checkpoint_dir: "model/${dl_model.full_path}"
+  tokenizer_path: "${tok_data.tokenizer_path}"
+  # past specific:
+  mode: absorbing
+  model: past
+  attn_sink: False
+  bias: True
+  dropout: 0
+  scale_loss: False
+  stack_enc_dec: True
+  tie_lmhead: True
+  train_mode: absorbing
+
+optim:
+  optimizer: adamw #adamw, sgd
+  learning_rate: 1e-3
+  weight_decay: 1e-4
+  betas: [0.9, 0.999]
+  warmup_pct: 0.05
+  schedule_free: False
+  grad_clip: 1
+
+eval:
+  num_examples: 48
+  batch_size: 48
+  eval_interval: 1000 # unused
+  results_dir: "data/eval_results/${model.name}"

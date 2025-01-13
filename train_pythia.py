@@ -83,7 +83,7 @@ class LitLLM(L.LightningModule):
         return self.llm(idx, targets)
 
 
-@hydra.main(config_path="config", config_name="config_pythia", version_base=None)
+@hydra.main(config_path="config", config_name="config_karolina_single_run_pythia", version_base=None)
 def main(cfg: DictConfig):
     conf, _ = hf_config.get_configs(cfg)
 
