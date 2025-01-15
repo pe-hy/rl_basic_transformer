@@ -60,3 +60,6 @@ eval:
 convert_hf:
   in_path: "temp/${model.name}"
   out_path: "temp/hf_${model.name}"
+
+cur:
+  max_epochs: 5
