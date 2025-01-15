@@ -39,7 +39,7 @@ def dfs(target, nums, heuristic=sum_heuristic, threshold=None, search_trace="", 
         for g, (_, new_node) in enumerate(generated_nodes):
             new_node.idx = f"{new_node.parent.idx},{node_index}"
             operations = str(new_node.operations[-1]).replace("*", " * ").replace("/", " / ").replace("+", " + ").replace("-", " - ").replace("=", " = ")
-            nums = str(current_node.nums).replace(",", "").replace("[", "").replace("]", "")
+            nums = str(new_node.nums).replace(",", "").replace("[", "").replace("]", "")
             search_trace += f"E {operations} R [ {nums} ] , "
 
             if len(new_node.nums) == 1 and new_node.nums[0] == target:
