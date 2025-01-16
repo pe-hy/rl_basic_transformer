@@ -20,26 +20,26 @@ data:
   val_target_file: "sos_filtered/val_target1_b4_t30_n500000_dfs_filtered.json"
   val_file: "sos_filtered/val1_b4_t30_n500000_dfs_filtered.json"
   num_train: 2e5
-  num_val: 48
+  num_val: 512
   num_workers: 64
 
 model:
   name: "Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs"
-  batch_size: 24
+  batch_size: 48
   accumulate_grad_batches: 1
   block_size: 4096
   epochs: 100
-  n_layer: 12
-  n_head: 8
-  n_embd: 128
+  n_layer: 6
+  n_head: 4
+  n_embd: 64
   vocab_size: 410
   padded_vocab_size: 410
-  bos_id: 403
-  eos_id: 407
+  bos_id: 404
+  eos_id: 408
   
 eval:
-  num_examples: 48
-  batch_size: 48
+  num_examples: 512
+  batch_size: 64
   eval_interval: 1 # epoch
   results_dir: "data/eval_results/${model.name}"
 

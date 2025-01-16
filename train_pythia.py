@@ -49,6 +49,7 @@ class LitLLM(L.LightningModule):
             batch["labels"],
             batch["attention_mask"],
         )
+        print(targets)
         _, loss = self(idx, targets)
         self.log("train_loss", loss, sync_dist=True)
         return loss
@@ -83,7 +84,11 @@ class LitLLM(L.LightningModule):
         return self.llm(idx, targets)
 
 
-@hydra.main(config_path="config", config_name="config_karolina_single_run_pythia", version_base=None)
+@hydra.main(
+    config_path="config",
+    config_name="config_pythia",
+    version_base=None,
+)
 def main(cfg: DictConfig):
     conf, _ = hf_config.get_configs(cfg)
 
@@ -113,11 +118,11 @@ def main(cfg: DictConfig):
     logger = WandbLogger(project="sos", name=f"{cfg.model.name}", config=wandb_config)
 
     checkpoint_callback = ModelCheckpoint(
-        monitor="val_loss",  # what metric to track
+        monitor="countdown_eval/accuracy",  # what metric to track
         dirpath=f"temp/{cfg.model.name}/checkpoints",  # where to save checkpoints
         filename="{epoch:02d}-{val_loss:.4f}",  # how to name checkpoints
         save_top_k=2,  # save top 3 models
-        mode="min",  # lower val_loss is better
+        mode="max",  # lower val_loss is better
     )
 
     eval_callback = EvalCallback(

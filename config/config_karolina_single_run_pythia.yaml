@@ -48,8 +48,8 @@ model:
   n_embd: 256
   vocab_size: 410
   padded_vocab_size: 410
-  bos_id: 403
-  eos_id: 407
+  bos_id: 404
+  eos_id: 408
 
 eval:
   num_examples: 512

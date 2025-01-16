@@ -54,8 +54,8 @@ model:
   n_embd: 128
   vocab_size: 410
   padded_vocab_size: 410
-  bos_id: 395
-  eos_id: 399
+  bos_id: 404
+  eos_id: 408
   checkpoint_dir: "model/${dl_model.full_path}"
   tokenizer_path: "tokenizer"
 
