@@ -80,13 +80,13 @@ def dfs(
                 search_trace += f"N {new_node.nums[0]} {target} ; "
             else:
                 node = str(new_node.idx).replace(",", "")
+                search_trace += f"G #{node} {target} [ {nums} ] , "
                 nums = (
                     str(current_node.nums)
                     .replace(",", "")
                     .replace("[", "")
                     .replace("]", "")
                 )
-                search_trace += f"G #{node} {target} [ {nums} ] , "
                 new_set = [(new_heuristic, new_node)]
 
                 node = str(new_node.idx).replace(",", "")
