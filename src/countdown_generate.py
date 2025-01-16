@@ -82,7 +82,7 @@ if __name__ == "__main__":
         if split == "train" or split == "grow":
             num_samples = args.num_samples
         else:
-            num_samples = 1000
+            num_samples = 5000
 
         zero_count = 0
         for t in tqdm.tqdm(range(num_samples)):
