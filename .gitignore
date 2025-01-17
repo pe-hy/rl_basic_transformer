@@ -1,3 +1,6 @@
+data/data.pkl
+data/test.pkl
+data/train.pkl
 Data/
 __pycache__
 wandb

@@ -3,7 +3,7 @@ import torch
 from typing import Optional
 import torch.optim
 from lightning import LightningModule
-from models.models import GPT
+from model.models import GPT
 from omegaconf import DictConfig
 
 class Pl_model_wrapper(LightningModule):
@@ -21,8 +21,8 @@ class Pl_model_wrapper(LightningModule):
         self.save_hyperparameters()
         self.gpt = GPT(model_config)
 
-    def forward(self, idx: torch.Tensor, targets: Optional[torch.Tensor] = None) -> torch.Tensor:
-        return self.gpt(idx, targets)
+    def forward(self, inputs: torch.Tensor, targets: Optional[torch.Tensor] = None) -> torch.Tensor:
+        return self.gpt(inputs)
 
     def configure_optimizers(self) -> dict:
         optimizer = self.gpt.configure_optimizers(
@@ -40,14 +40,14 @@ class Pl_model_wrapper(LightningModule):
         }
     
     def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
-        idx, targets = batch
-        _, loss = self(idx, targets)
+        inputs, idx = batch, batch_idx
+        logits, loss = self(inputs)
         self.log("train_loss", loss)
         return loss
     
     def validation_step(self, batch, batch_idx):
-        idx, targets = batch
-        logits, loss = self(idx, targets)
+        inputs, idx = batch, batch_idx
+        logits, loss = self(inputs)
         #accuracy = self.calculate_accuracy(logits, targets)
         self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         #self.log('val_accuracy', accuracy, on_step=True, on_epoch=True, prog_bar=True)    
