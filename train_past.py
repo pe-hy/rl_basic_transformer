@@ -176,7 +176,7 @@ class PLModel(LightningModule):
         return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
 
 
-@hydra.main(config_path="config", config_name="config_karolina_single_run_past", version_base=None)
+@hydra.main(config_path="config", config_name="config_past", version_base=None)
 def main(cfg: DictConfig):
     conf, _ = hf_config.get_configs(cfg)
     wandb_config = OmegaConf.to_container(cfg, resolve=True)
@@ -218,9 +218,7 @@ def main(cfg: DictConfig):
 
     # data.connect(max_seq_length=cfg.model.block_size)
 
-    logger = WandbLogger(
-        project="sos", name=f"{cfg.model.name}", config=wandb_config
-    )
+    logger = WandbLogger(project="sos", name=f"{cfg.model.name}", config=wandb_config)
 
     checkpoint_callback = ModelCheckpoint(
         monitor="countdown_eval/accuracy",  # what metric to track
@@ -232,8 +230,6 @@ def main(cfg: DictConfig):
 
     total_params = sum(p.numel() for p in model.parameters())
     print("total number of params:", total_params)
-
-
 
 
 if __name__ == "__main__":

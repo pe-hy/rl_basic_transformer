@@ -49,7 +49,6 @@ class LitLLM(L.LightningModule):
             batch["labels"],
             batch["attention_mask"],
         )
-        print(targets)
         _, loss = self(idx, targets)
         self.log("train_loss", loss, sync_dist=True)
         return loss
@@ -120,7 +119,7 @@ def main(cfg: DictConfig):
     checkpoint_callback = ModelCheckpoint(
         monitor="countdown_eval/accuracy",  # what metric to track
         dirpath=f"temp/{cfg.model.name}/checkpoints",  # where to save checkpoints
-        filename="{epoch:02d}-{val_loss:.4f}",  # how to name checkpoints
+        filename="{epoch:02d}-{countdown_eval-accuracy:.4f}",  # how to name checkpoints
         save_top_k=2,  # save top 3 models
         mode="max",  # lower val_loss is better
     )

@@ -29,7 +29,7 @@ model:
   accumulate_grad_batches: 1
   block_size: 4096
   epochs: 100
-  n_layer: 6
+  n_layer: 8
   n_head: 4
   n_embd: 64
   vocab_size: 410

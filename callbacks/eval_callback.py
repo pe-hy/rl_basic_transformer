@@ -235,7 +235,15 @@ class EvalCallback(Callback):
 
             # Use trainer's logger to log metrics
             for key, value in metrics.items():
-                trainer.logger.log_metrics({key: value}, step=trainer.global_step)
+                pl_module.log(
+                    key,
+                    value,
+                    on_step=False,
+                    on_epoch=True,
+                    sync_dist=True,
+                    prog_bar=True,
+                )
+                # trainer.logger.log_metrics({key: value}, step=trainer.global_step)
             print("Successfully logged countdown evaluation metrics")
 
             # Save to CSV
@@ -265,7 +273,7 @@ class EvalCallback(Callback):
             print(f"Average true rating: {avg_true_rating}")
             print(f"Accuracy: {accuracy}")
             print(f"True Accuracy: {true_accuracy}")
-
+            return metrics
         except Exception as e:
             print(f"Error during countdown evaluation: {e}")
             raise e
