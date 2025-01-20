@@ -8,8 +8,12 @@ from utils.data_pythia import *
 import hydra
 from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig, OmegaConf
-from callbacks.eval_callback import EvalCallback
-from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor, EarlyStopping
+from callbacks.eval_callback_cur import EvalCallback
+from lightning.pytorch.callbacks import (
+    ModelCheckpoint,
+    LearningRateMonitor,
+    EarlyStopping,
+)
 from config import hf_config
 from litgpt.config import configs, Config, name_to_config
 from litgpt.model import GPT
@@ -17,30 +21,40 @@ from litgpt.api import Preprocessor
 
 import json
 import os
+import logging
 
 
 class LitLLM(L.LightningModule):
-    def __init__(self, cfg, model, preprocessor, trainer_ckpt_path=None):
+    def __init__(
+        self, cfg, model, preprocessor, stage, global_step=0, trainer_ckpt_path=None
+    ):
         super().__init__()
-
-        # self.llm = LLM.load(
-        #     checkpoint_dir, tokenizer_dir=tokenizer_dir, distribute=None
-        # )
-        # return cls(
-        #     model=model, preprocessor=preprocessor, prompt_style=prompt_style,
-        #     config=config, checkpoint_dir=checkpoint_dir, fabric=fabric, generate_strategy=None,
-        #     kv_cache_initialized=False, fixed_kv_cache_size=False
-        # )
-
+        self.save_hyperparameters(ignore=["model"])
         self.llm = model
         self.cfg = cfg
         self.preprocessor = preprocessor
         self.trainer_ckpt_path = trainer_ckpt_path
+        self.stage = stage
+        # Use a class-level attribute to track global step across stages
+        self.current_global_step = global_step
         _, self.hf_conf = hf_config.get_configs(cfg)
 
+    def advance_stage(self):
+        self.stage += 1
+        return self
+
+    def on_train_batch_end(self, *args, **kwargs):
+        self.current_global_step += 1
+        return super().on_train_batch_end(*args, **kwargs)
+
+    @property
+    def global_step(self):
+        return self.current_global_step
+
     def setup(self, stage):
-        self.preprocessor.tokenizer.save_pretrained(self.cfg.convert_hf.in_path)
-        with open(os.path.join(self.cfg.convert_hf.in_path, "config.json"), "w") as f:
+        save_path = os.path.join(self.cfg.convert_hf.in_path, f"stage_{self.stage}")
+        self.preprocessor.tokenizer.save_pretrained(save_path)
+        with open(os.path.join(save_path, "config.json"), "w") as f:
             json.dump(self.hf_conf, f, indent=2)
 
     def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
@@ -83,7 +97,11 @@ class LitLLM(L.LightningModule):
         return self.llm(idx, targets)
 
 
-@hydra.main(config_path="config", config_name="config_karolina_single_run_pythia", version_base=None)
+@hydra.main(
+    config_path="config",
+    config_name="config_pythia_curriculum",
+    version_base=None,
+)
 def main(cfg: DictConfig):
 
     conf, _ = hf_config.get_configs(cfg)
@@ -103,67 +121,97 @@ def main(cfg: DictConfig):
     preprocessor = Preprocessor(
         tokenizer, device="cuda" if torch.cuda.is_available() else "cpu"
     )
+    curriculum_datasets = get_curriculum(cfg, tokenizer)
+
+    num_stages = len(curriculum_datasets)
+    epochs_per_stage = [min(stage + 1, 10) for stage in range(num_stages)]
+    print(
+        "Number of datasets in cur: ",
+        num_stages,
+        "total epochs: ",
+        sum(epochs_per_stage),
+    )
     model = LLM(GPT(conf), preprocessor=preprocessor, config=conf)
+    lit_model = LitLLM(model=model, cfg=cfg, preprocessor=preprocessor, stage=0)
 
-    lit_model = LitLLM(model=model, cfg=cfg, preprocessor=preprocessor)
-    datasets = get_data(cfg, tokenizer)
-    data = Datamodule(datasets, batch_size, num_workers, tokenizer)
-
-    for data in datasets:
-        logging.info("#"*10)
-        logging.info(f"Curriculum {cfg.cur.type}")
+    logger = WandbLogger(
+        project="sos", name=f"{cfg.model.name}_curriculum", config=wandb_config
+    )
+    for stage, data in enumerate(curriculum_datasets):
+        lit_model.stage = stage
+        wandb_config.update({"curriculum_stage": stage})
+        current_epochs = epochs_per_stage[stage]
+        logging.info("#" * 10)
         logging.info(f"Data size: {len(data['train'])}")
-        # data = Datamodule(datasets, batch_size, num_workers, tokenizer)
         data = Datamodule(
-            data=data,
+            dataset=data,
             batch_size=batch_size,
-            num_workers=cfg.data.num_workers,
-            tokenizer=tokenizer
+            num_workers=num_workers,
+            tokenizer=tokenizer,
         )
 
-    data.connect(max_seq_length=cfg.model.block_size)
+        data.connect(max_seq_length=cfg.model.block_size)
 
-    logger = WandbLogger(project="sos", name=f"{cfg.model.name}", config=wandb_config)
+        if stage == len(curriculum_datasets) - 1:
+            checkpoint_callback = ModelCheckpoint(
+                monitor="countdown_eval/accuracy",
+                dirpath=f"temp/{cfg.model.name}/checkpoints/stage_{stage}",
+                filename="{epoch:02d}-{countdown_eval-accuracy:.4f}",
+                save_top_k=2,
+                mode="max",
+            )
+        else:
+            checkpoint_callback = ModelCheckpoint(
+                monitor="val_loss",
+                dirpath=f"temp/{cfg.model.name}/checkpoints/stage_{stage}",
+                filename="{epoch:02d}-{val_loss:.4f}",
+                save_top_k=2,
+                mode="min",
+            )
 
-    checkpoint_callback = ModelCheckpoint(
-        monitor="val_loss",  # what metric to track
-        dirpath=f"temp/{cfg.model.name}/checkpoints",  # where to save checkpoints
-        filename="{epoch:02d}-{val_loss:.4f}",  # how to name checkpoints
-        save_top_k=2,  # save top 3 models
-        mode="min",  # lower val_loss is better
-    )
+        eval_callback = EvalCallback(
+            data_dir=cfg.data.datapath,
+            eval_data=cfg.data.val_target_file,
+            tokenizer=tokenizer,
+            num_examples=cfg.eval.num_examples,
+            batch_size=cfg.eval.batch_size,
+            config=cfg,
+            eval_interval=cfg.eval.eval_interval,
+            save_path=cfg.convert_hf.in_path,
+            stage=stage,
+        )
+        total_params = sum(p.numel() for p in model.parameters())
+        print("total number of params:", total_params)
 
-    eval_callback = EvalCallback(
-        data_dir=cfg.data.datapath,
-        eval_data=cfg.data.val_file,
-        tokenizer=tokenizer,
-        num_examples=cfg.eval.num_examples,
-        batch_size=cfg.eval.batch_size,
-        config=cfg,
-        eval_interval=cfg.eval.eval_interval,
-        save_path=cfg.convert_hf.in_path,
-    )
-    total_params = sum(p.numel() for p in model.parameters())
-    print("total number of params:", total_params)
+        trainer = L.Trainer(
+            devices=1,
+            accelerator="cuda",
+            max_epochs=current_epochs,
+            accumulate_grad_batches=accumulate_grad_batches,
+            precision="bf16-true",
+            val_check_interval=1.0,
+            callbacks=[
+                eval_callback,
+                checkpoint_callback,
+                LearningRateMonitor(),
+                EarlyStopping(
+                    monitor="countdown_eval/accuracy",
+                    patience=cfg.cur.max_epochs,
+                    check_on_train_epoch_end=True,
+                    stopping_threshold=0.99,
+                    mode="max",
+                ),
+            ],
+            logger=logger,
+        )
+        trainer.fit(lit_model, data)
+        current_step = lit_model.global_step
+        if stage < len(curriculum_datasets) - 1:
+            lit_model = lit_model.advance_stage()
 
-    trainer = L.Trainer(
-        devices=1,
-        accelerator="cuda",
-        max_epochs=cfg.model.epochs,
-        accumulate_grad_batches=accumulate_grad_batches,
-        precision="bf16-true",
-        val_check_interval=1.0,
-        callbacks=[LearningRateMonitor(), EarlyStopping(monitor="countdown_eval/accuracy",
-                        patience=cfg.cur.max_epochs,
-                        check_on_train_epoch_end = False,
-                        stopping_threshold = 0.7,
-                        mode = 'max'), checkpoint_callback, eval_callback],
-        logger=logger,
-    )
-    trainer.fit(lit_model, data)
-
+    final_save_path = os.path.join(cfg.convert_hf.in_path, f"stage_{num_stages-1}")
     lit_model.llm.model.to(lit_model.llm.preprocessor.device)
-    lit_model.llm.save(cfg.convert_hf.in_path)
+    lit_model.llm.save(final_save_path)
 
 
 if __name__ == "__main__":
