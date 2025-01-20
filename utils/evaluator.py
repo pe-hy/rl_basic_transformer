@@ -1,3 +1,7 @@
+import warnings
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
+
 from transformers import TrainerCallback
 from lightning.pytorch.callbacks import Callback
 import os
@@ -36,36 +40,24 @@ def convert_litgpt_to_hf(cfg, stage=None):
         state_dict=state_dict,
         attn_implementation="flash_attention_2",
     )
+    print(source_dir, "-" * 10, out_dir)
     return hf_model
 
 
-class EvalCallback(Callback):
-    def __init__(
-        self,
-        data_dir,
-        eval_data,
-        tokenizer,
-        num_examples=128,
-        batch_size=64,
-        save_path=None,
-        config=None,
-        eval_interval=1,
-        stage=None,
-    ):
-        super().__init__()
-        self.data_dir = data_dir
-        self.eval_data = eval_data
-        self.num_examples = num_examples
-        self.batch_size = batch_size
-        self.tokenizer = tokenizer
-        self.last_eval_step = -1  # Initialize to -1
+class CountdownEvaluator:
+    def __init__(self, config, stage, tokenizer, save_path, step=None, model=None):
         self.config = config
-        self.hf_model = None
-        self.eval_interval = eval_interval
+        self.num_examples = config.eval.num_examples
         self.stage = stage
+        self.batch_size = config.eval.batch_size
+        self.global_step = step
+        self.eval_data = config.data.val_target_file
+        self.tokenizer = tokenizer
         self.save_path = os.path.join(save_path, f"stage_{stage}")
-        self.last_eval_epoch = -1
-        self.total_epochs = 0
+
+        self.results_dir = config.eval.results_dir
+        self.data_dir = config.data.datapath
+        self.hf_model = None
 
         # Load evaluation data once
         data_file = os.path.join(self.data_dir, self.eval_data)
@@ -79,8 +71,6 @@ class EvalCallback(Callback):
                         print(f"Error parsing line: {e}")
                         continue
 
-        # Create results directory if it doesn't exist
-        self.results_dir = self.config.eval.results_dir
         os.makedirs(self.results_dir, exist_ok=True)
 
         # Initialize results DataFrame
@@ -113,6 +103,7 @@ class EvalCallback(Callback):
         """
         Evaluate the model on the data using a sliding window so that the context length is not exceeded
         """
+
         output_texts_concat = []
         for b in trange(0, len(data), batch_size):
             batch = data[b : min(b + batch_size, len(data))]
@@ -142,28 +133,9 @@ class EvalCallback(Callback):
 
         return output_texts_concat
 
-    def on_train_epoch_end(self, trainer, pl_module):
-        # Calculate total epochs including previous stages
-        current_total_epoch = self.total_epochs + trainer.current_epoch
-
-        if (
-            current_total_epoch % self.eval_interval == 0
-            and current_total_epoch > self.last_eval_epoch
-            and trainer.is_global_zero
-        ):
-            print(
-                f"Saving model before evaluation... (Total epoch {current_total_epoch})"
-            )
-            pl_module.llm.model.to(pl_module.llm.preprocessor.device)
-            pl_module.llm.save(self.save_path)
-            self.run_evaluation(trainer, pl_module, current_total_epoch)
-            self.last_eval_epoch = current_total_epoch
-
-    def run_evaluation(self, trainer, pl_module, current_total_epoch):
-        print(
-            f"\nRunning custom countdown evaluation at epoch {current_total_epoch}"
-        )  # Changed from step
-
+    def evaluate(self, pl_module):
+        pl_module.llm.model.to(pl_module.llm.preprocessor.device)
+        pl_module.llm.save(self.save_path)
         try:
             self.hf_model = convert_litgpt_to_hf(self.config, stage=self.stage)
             self.hf_model.cuda()
@@ -182,7 +154,7 @@ class EvalCallback(Callback):
                 self.tokenizer,
                 test_prompts,
                 batch_size=self.batch_size,
-                context_len=4096,
+                context_len=self.config.model.block_size,
                 temperature=0.0,
                 n=1,
             )
@@ -212,7 +184,7 @@ class EvalCallback(Callback):
 
             # Save detailed results
             eval_dir = os.path.join(
-                self.config.eval.results_dir, f"step_{pl_module.global_step}"
+                self.config.eval.results_dir, f"step_{self.global_step}"
             )
             os.makedirs(eval_dir, exist_ok=True)
 
@@ -232,9 +204,6 @@ class EvalCallback(Callback):
                     indent=4,
                 )
 
-            self.last_eval_step = pl_module.global_step
-
-            # Log using the trainer's logger instead of wandb directly
             metrics = {
                 "countdown_eval/average_rating": avg_rating,
                 "countdown_eval/average_true_rating": avg_true_rating,
@@ -242,25 +211,12 @@ class EvalCallback(Callback):
                 "countdown_eval/true_accuracy": true_accuracy,
             }
 
-            # Use trainer's logger to log metrics
-            for key, value in metrics.items():
-                pl_module.log(
-                    key,
-                    value,
-                    on_step=False,
-                    on_epoch=True,
-                    sync_dist=True,
-                    prog_bar=True,
-                )
-                # trainer.logger.log_metrics({key: value}, step=pl_module.global_step)
-            print("Successfully logged countdown evaluation metrics")
-
             # Save to CSV
-            if not any(self.results_df["step"] == pl_module.global_step):
+            if not any(self.results_df["step"] == self.global_step):
                 new_row = pd.DataFrame(
                     [
                         {
-                            "step": pl_module.global_step,
+                            "step": self.global_step,  # Use our counter
                             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             "average_rating": avg_rating,
                             "average_true_rating": avg_true_rating,
@@ -270,7 +226,6 @@ class EvalCallback(Callback):
                         }
                     ]
                 )
-
                 self.results_df = pd.concat(
                     [self.results_df, new_row], ignore_index=True
                 )
@@ -282,7 +237,9 @@ class EvalCallback(Callback):
             print(f"Average true rating: {avg_true_rating}")
             print(f"Accuracy: {accuracy}")
             print(f"True Accuracy: {true_accuracy}")
+
             return metrics
+
         except Exception as e:
             print(f"Error during countdown evaluation: {e}")
             raise e
@@ -291,7 +248,3 @@ class EvalCallback(Callback):
             # Cleanup
             del self.hf_model
             torch.cuda.empty_cache()
-
-    def on_fit_end(self, trainer, pl_module):
-        # Update total epochs at end of stage
-        self.total_epochs += trainer.current_epoch + 1

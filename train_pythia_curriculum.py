@@ -8,7 +8,7 @@ from utils.data_pythia import *
 import hydra
 from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig, OmegaConf
-from callbacks.eval_callback_cur import EvalCallback
+from utils.evaluator import *
 from lightning.pytorch.callbacks import (
     ModelCheckpoint,
     LearningRateMonitor,
@@ -18,38 +18,21 @@ from config import hf_config
 from litgpt.config import configs, Config, name_to_config
 from litgpt.model import GPT
 from litgpt.api import Preprocessor
-
 import json
 import os
 import logging
 
 
 class LitLLM(L.LightningModule):
-    def __init__(
-        self, cfg, model, preprocessor, stage, global_step=0, trainer_ckpt_path=None
-    ):
+    def __init__(self, cfg, model, preprocessor, stage):
         super().__init__()
-        self.save_hyperparameters(ignore=["model"])
         self.llm = model
         self.cfg = cfg
         self.preprocessor = preprocessor
-        self.trainer_ckpt_path = trainer_ckpt_path
         self.stage = stage
-        # Use a class-level attribute to track global step across stages
-        self.current_global_step = global_step
         _, self.hf_conf = hf_config.get_configs(cfg)
 
-    def advance_stage(self):
-        self.stage += 1
-        return self
-
-    def on_train_batch_end(self, *args, **kwargs):
-        self.current_global_step += 1
-        return super().on_train_batch_end(*args, **kwargs)
-
-    @property
-    def global_step(self):
-        return self.current_global_step
+        self.last_eval_epoch = -1
 
     def setup(self, stage):
         save_path = os.path.join(self.cfg.convert_hf.in_path, f"stage_{self.stage}")
@@ -67,6 +50,20 @@ class LitLLM(L.LightningModule):
         self.log("train_loss", loss, sync_dist=True)
         return loss
 
+    def on_validation_epoch_end(self):
+        self.evaluator = CountdownEvaluator(
+            config=self.cfg,
+            stage=self.stage,
+            save_path=self.cfg.convert_hf.in_path,
+            tokenizer=self.preprocessor.tokenizer,
+            step=self.global_step,
+        )
+        # Use Lightning's internal global_step
+        metrics = self.evaluator.evaluate(pl_module=self)
+        for k, v in metrics.items():
+            if isinstance(v, (int, float)):
+                self.log(f"{k}", v, on_epoch=True, sync_dist=True)
+
     def validation_step(self, batch, batch_idx):
         idx, targets, att_mask = (
             batch["input_ids"],
@@ -74,11 +71,9 @@ class LitLLM(L.LightningModule):
             batch["attention_mask"],
         )
         logits, loss = self(idx, targets)
-        # accuracy = self.calculate_accuracy(logits, targets)
         self.log(
             "val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True
         )
-        # self.log('val_accuracy', accuracy, on_step=True, on_epoch=True, prog_bar=True)
         return {"val_loss": loss}
 
     def configure_optimizers(self):
@@ -103,9 +98,7 @@ class LitLLM(L.LightningModule):
     version_base=None,
 )
 def main(cfg: DictConfig):
-
     conf, _ = hf_config.get_configs(cfg)
-
     wandb_config = OmegaConf.to_container(cfg, resolve=True)
 
     print("Current model configuration:")
@@ -125,31 +118,36 @@ def main(cfg: DictConfig):
 
     num_stages = len(curriculum_datasets)
     epochs_per_stage = [min(stage + 1, 10) for stage in range(num_stages)]
+    print(epochs_per_stage)
     print(
         "Number of datasets in cur: ",
         num_stages,
         "total epochs: ",
         sum(epochs_per_stage),
     )
+
     model = LLM(GPT(conf), preprocessor=preprocessor, config=conf)
     lit_model = LitLLM(model=model, cfg=cfg, preprocessor=preprocessor, stage=0)
 
-    logger = WandbLogger(
-        project="sos", name=f"{cfg.model.name}_curriculum", config=wandb_config
-    )
+    logger = WandbLogger(project="sos", name=f"{cfg.model.name}", config=wandb_config)
+
     for stage, data in enumerate(curriculum_datasets):
         lit_model.stage = stage
+        print("lit_model.stage: ", lit_model.stage)
         wandb_config.update({"curriculum_stage": stage})
-        current_epochs = epochs_per_stage[stage]
+        logger.experiment.config.update(
+            {"curriculum_stage": stage}, allow_val_change=True
+        )
+
         logging.info("#" * 10)
         logging.info(f"Data size: {len(data['train'])}")
+        current_epochs = epochs_per_stage[stage]
         data = Datamodule(
             dataset=data,
             batch_size=batch_size,
             num_workers=num_workers,
             tokenizer=tokenizer,
         )
-
         data.connect(max_seq_length=cfg.model.block_size)
 
         if stage == len(curriculum_datasets) - 1:
@@ -169,20 +167,6 @@ def main(cfg: DictConfig):
                 mode="min",
             )
 
-        eval_callback = EvalCallback(
-            data_dir=cfg.data.datapath,
-            eval_data=cfg.data.val_target_file,
-            tokenizer=tokenizer,
-            num_examples=cfg.eval.num_examples,
-            batch_size=cfg.eval.batch_size,
-            config=cfg,
-            eval_interval=cfg.eval.eval_interval,
-            save_path=cfg.convert_hf.in_path,
-            stage=stage,
-        )
-        total_params = sum(p.numel() for p in model.parameters())
-        print("total number of params:", total_params)
-
         trainer = L.Trainer(
             devices=1,
             accelerator="cuda",
@@ -191,7 +175,6 @@ def main(cfg: DictConfig):
             precision="bf16-true",
             val_check_interval=1.0,
             callbacks=[
-                eval_callback,
                 checkpoint_callback,
                 LearningRateMonitor(),
                 EarlyStopping(
@@ -204,10 +187,8 @@ def main(cfg: DictConfig):
             ],
             logger=logger,
         )
+
         trainer.fit(lit_model, data)
-        current_step = lit_model.global_step
-        if stage < len(curriculum_datasets) - 1:
-            lit_model = lit_model.advance_stage()
 
     final_save_path = os.path.join(cfg.convert_hf.in_path, f"stage_{num_stages-1}")
     lit_model.llm.model.to(lit_model.llm.preprocessor.device)
