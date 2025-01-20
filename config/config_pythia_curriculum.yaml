@@ -19,8 +19,8 @@ data:
   train_file: "sos_filtered/train1_b4_t30_n500000_dfs_filtered.json"
   val_target_file: "sos_filtered/test1_b4_t30_n500000_dfs_filtered.json"
   val_file: "sos_filtered/val1_b4_t30_n500000_dfs_filtered.json"
-  num_train: 64
-  num_val: 64
+  num_train: 2e5
+  num_val: 512
   num_workers: 16
 
 model:
@@ -38,7 +38,7 @@ model:
   eos_id: 408
   
 eval:
-  num_examples: 64
+  num_examples: 512
   batch_size: 64
   eval_interval: 1 # epoch
   results_dir: "data/eval_results/${model.name}"

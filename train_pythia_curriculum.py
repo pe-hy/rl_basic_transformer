@@ -8,7 +8,7 @@ from utils.data_pythia import *
 import hydra
 from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig, OmegaConf
-from utils.evaluator import *
+from utils.curr_evaluator import *
 from lightning.pytorch.callbacks import (
     ModelCheckpoint,
     LearningRateMonitor,
@@ -29,13 +29,44 @@ class LitLLM(L.LightningModule):
         self.llm = model
         self.cfg = cfg
         self.preprocessor = preprocessor
-        self.stage = stage
+        self.stage_num = stage
         _, self.hf_conf = hf_config.get_configs(cfg)
 
-        self.last_eval_epoch = -1
+        # Track the base step count from previous stages
+        self.base_step = 0
+        # Track the last evaluation step to ensure uniqueness
+        self.last_eval_step = 0
+
+    def on_validation_epoch_end(self):
+        # Save model after each epoch
+        save_path = os.path.join(self.cfg.convert_hf.in_path, f"stage_{self.stage_num}")
+        self.llm.model.to(self.llm.preprocessor.device)
+        self.llm.save(save_path)
+
+        # Return model to training device
+        self.llm.model.to(self.device)
+        # Get actual training progress
+        true_step = self.base_step + self.global_step
+
+        # If this step was already evaluated, increment by 1
+        if true_step <= self.last_eval_step:
+            true_step = self.last_eval_step + 1
+
+        self.last_eval_step = true_step
+
+        self.evaluator = CountdownEvaluator(
+            config=self.cfg,
+            stage=self.stage_num,
+            tokenizer=self.preprocessor.tokenizer,
+            step=true_step,
+        )
+        metrics = self.evaluator.evaluate()
+        for k, v in metrics.items():
+            if isinstance(v, (int, float)):
+                self.log(f"{k}", v, on_epoch=True, sync_dist=True)
 
     def setup(self, stage):
-        save_path = os.path.join(self.cfg.convert_hf.in_path, f"stage_{self.stage}")
+        save_path = os.path.join(self.cfg.convert_hf.in_path, f"stage_{self.stage_num}")
         self.preprocessor.tokenizer.save_pretrained(save_path)
         with open(os.path.join(save_path, "config.json"), "w") as f:
             json.dump(self.hf_conf, f, indent=2)
@@ -50,21 +81,10 @@ class LitLLM(L.LightningModule):
         self.log("train_loss", loss, sync_dist=True)
         return loss
 
-    def on_validation_epoch_end(self):
-        self.evaluator = CountdownEvaluator(
-            config=self.cfg,
-            stage=self.stage,
-            save_path=self.cfg.convert_hf.in_path,
-            tokenizer=self.preprocessor.tokenizer,
-            step=self.global_step,
-        )
-        # Use Lightning's internal global_step
-        metrics = self.evaluator.evaluate(pl_module=self)
-        for k, v in metrics.items():
-            if isinstance(v, (int, float)):
-                self.log(f"{k}", v, on_epoch=True, sync_dist=True)
-
     def validation_step(self, batch, batch_idx):
+        if self.global_step == 0:
+            print(batch["input_ids"])
+            print(batch["input_ids"].shape)
         idx, targets, att_mask = (
             batch["input_ids"],
             batch["labels"],
@@ -130,7 +150,6 @@ def main(cfg: DictConfig):
     lit_model = LitLLM(model=model, cfg=cfg, preprocessor=preprocessor, stage=0)
 
     logger = WandbLogger(project="sos", name=f"{cfg.model.name}", config=wandb_config)
-
     for stage, data in enumerate(curriculum_datasets):
         lit_model.stage = stage
         print("lit_model.stage: ", lit_model.stage)
@@ -187,8 +206,9 @@ def main(cfg: DictConfig):
             ],
             logger=logger,
         )
-
         trainer.fit(lit_model, data)
+
+        lit_model.base_step += trainer.global_step
 
     final_save_path = os.path.join(cfg.convert_hf.in_path, f"stage_{num_stages-1}")
     lit_model.llm.model.to(lit_model.llm.preprocessor.device)

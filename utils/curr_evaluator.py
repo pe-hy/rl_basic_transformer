@@ -17,6 +17,13 @@ from pathlib import Path
 from transformers import AutoConfig, AutoModelForCausalLM
 from litgpt.scripts.convert_lit_checkpoint import convert_lit_checkpoint
 from litgpt.utils import copy_config_files, auto_download_checkpoint
+import torch
+from pathlib import Path
+from datetime import datetime
+
+import torch
+from pathlib import Path
+from datetime import datetime
 
 
 def convert_litgpt_to_hf(cfg, stage=None):
@@ -40,12 +47,11 @@ def convert_litgpt_to_hf(cfg, stage=None):
         state_dict=state_dict,
         attn_implementation="flash_attention_2",
     )
-    print(source_dir, "-" * 10, out_dir)
     return hf_model
 
 
 class CountdownEvaluator:
-    def __init__(self, config, stage, tokenizer, save_path, step=None, model=None):
+    def __init__(self, config, stage, tokenizer, step=None, model=None):
         self.config = config
         self.num_examples = config.eval.num_examples
         self.stage = stage
@@ -53,7 +59,6 @@ class CountdownEvaluator:
         self.global_step = step
         self.eval_data = config.data.val_target_file
         self.tokenizer = tokenizer
-        self.save_path = os.path.join(save_path, f"stage_{stage}")
 
         self.results_dir = config.eval.results_dir
         self.data_dir = config.data.datapath
@@ -133,14 +138,11 @@ class CountdownEvaluator:
 
         return output_texts_concat
 
-    def evaluate(self, pl_module):
-        pl_module.llm.model.to(pl_module.llm.preprocessor.device)
-        pl_module.llm.save(self.save_path)
+    def evaluate(self):
         try:
             self.hf_model = convert_litgpt_to_hf(self.config, stage=self.stage)
             self.hf_model.cuda()
             self.hf_model.eval()
-
             # Prepare evaluation data
             test_prompts = [
                 self.tokenizer.bos_token
