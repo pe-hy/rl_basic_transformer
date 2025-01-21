@@ -37,7 +37,7 @@ class LitLLM(L.LightningModule):
         # Track the last evaluation step to ensure uniqueness
         self.last_eval_step = 0
 
-    def on_validation_epoch_end(self):
+    def on_train_epoch_end(self):
         # Save model after each epoch
         save_path = os.path.join(self.cfg.convert_hf.in_path, f"stage_{self.stage_num}")
         self.llm.model.to(self.llm.preprocessor.device)
@@ -82,9 +82,9 @@ class LitLLM(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        if self.global_step == 0:
-            print(batch["input_ids"])
-            print(batch["input_ids"].shape)
+        # if self.global_step == 0:
+        #     # print(batch["input_ids"])
+        #     # print(batch["input_ids"].shape)
         idx, targets, att_mask = (
             batch["input_ids"],
             batch["labels"],
@@ -150,16 +150,16 @@ def main(cfg: DictConfig):
     lit_model = LitLLM(model=model, cfg=cfg, preprocessor=preprocessor, stage=0)
 
     logger = WandbLogger(project="sos", name=f"{cfg.model.name}", config=wandb_config)
+    sample_idx = 0
     for stage, data in enumerate(curriculum_datasets):
-        lit_model.stage = stage
-        print("lit_model.stage: ", lit_model.stage)
+        print("lit_model.stage: ", lit_model.stage_num, "stage: ", stage)
+        print(tokenizer.decode(data["train"][sample_idx]["input_ids"]))
+        lit_model.stage_num = stage
         wandb_config.update({"curriculum_stage": stage})
         logger.experiment.config.update(
             {"curriculum_stage": stage}, allow_val_change=True
         )
 
-        logging.info("#" * 10)
-        logging.info(f"Data size: {len(data['train'])}")
         current_epochs = epochs_per_stage[stage]
         data = Datamodule(
             dataset=data,

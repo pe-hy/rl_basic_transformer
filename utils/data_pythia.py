@@ -115,6 +115,9 @@ def get_data(cfg: DictConfig, tokenizer):
 
 
 def get_curriculum(cfg: DictConfig, tokenizer):
+    """
+    Creates curriculum datasets with proper stage handling while preserving test data.
+    """
     train_file = to_absolute_path(os.path.join(cfg.data.datapath, cfg.data.train_file))
     val_file = to_absolute_path(os.path.join(cfg.data.datapath, cfg.data.val_file))
     val_target_file = os.path.join(cfg.data.datapath, cfg.data.val_target_file)
@@ -132,94 +135,95 @@ def get_curriculum(cfg: DictConfig, tokenizer):
     hf_dataset["val"] = hf_dataset["val"].select(range(int(cfg.data["num_val"])))
     hf_dataset["test"] = hf_dataset["test"].select(range(int(cfg.eval["num_examples"])))
 
-    def split_search_path(path_list, stage, num_stages=10):
-        all_splits = []
-        for path in path_list:
-            if stage == num_stages - 1:  # If it's the final stage (10th)
-                all_splits.append(path)  # Keep the original full path
-            else:
-                # Get all comma positions
-                comma_positions = [i for i, char in enumerate(path) if char == ","]
-
-                if not comma_positions:
-                    # If no commas, just return the whole path
-                    all_splits.append(path)
-                    continue
-
-                # Calculate desired split point based on total path length
-                total_length = len(path)
-                target_position = int(total_length * ((stage + 1) / 10))
-
-                # Find the appropriate comma position:
-                # If target position is before first comma, use first comma
-                # If target position is after a comma, use the last comma before target
-                if target_position <= comma_positions[0]:
-                    split_position = comma_positions[0]
-                else:
-                    # Get all commas before target position
-                    earlier_commas = [
-                        pos for pos in comma_positions if pos <= target_position
-                    ]
-                    if earlier_commas:
-                        split_position = max(earlier_commas)
-                    else:
-                        split_position = comma_positions[0]
-
-                split_path = path[:split_position]  # Split before the comma
-                all_splits.append(split_path)
-
-        return all_splits
-
-    def tokenize_for_curriculum(element, stage=None):
-        if stage is not None and (
-            element["split"] == "train" or element["split"] == "val"
-        ):
-            # For train and val splits, process according to the curriculum
-            text = []
-            for path_idx in range(len(element["search_path"])):
-                splits = split_search_path([element["search_path"][path_idx]], stage)
-                processed_text = (
-                    tokenizer.bos_token + splits[0].strip() + tokenizer.eos_token
-                )
-                text.append(processed_text)
-        else:
-            # For test split or when stage is None, process normally
-            text = [
-                tokenizer.bos_token
-                + element["search_path"][e].strip()
-                + tokenizer.eos_token
-                for e in range(len(element["search_path"]))
-            ]
-
-        outputs = tokenizer(
-            text,
-            truncation=True,
-            max_length=cfg.model.block_size,
-            return_overflowing_tokens=True,
-            return_length=True,
-            stride=0,
-            padding="max_length",
-        )
-        return {"input_ids": outputs["input_ids"]}
-
-    # Add split information to the datasets
     for split in hf_dataset:
         hf_dataset[split] = hf_dataset[split].add_column(
             "split", [split] * len(hf_dataset[split])
         )
 
-    # Create exactly 10 curriculum datasets
     num_stages = 10
     curriculum_datasets = []
-    for i in range(num_stages):
+
+    def create_tokenize_function(curr_stage):
+        def tokenize_for_stage(examples):
+            processed_examples = {"input_ids": []}
+
+            for i in range(len(examples["search_path"])):
+                if examples["split"][i] == "test":
+                    # For test split, always use the complete path
+                    text = (
+                        tokenizer.bos_token
+                        + examples["search_path"][i].strip()
+                        + tokenizer.eos_token
+                    )
+                else:
+                    # For train and val, apply curriculum
+                    splits = split_search_path([examples["search_path"][i]], curr_stage)
+                    text = tokenizer.bos_token + splits[0].strip() + tokenizer.eos_token
+
+                outputs = tokenizer(
+                    text,
+                    truncation=True,
+                    max_length=cfg.model.block_size,
+                    return_overflowing_tokens=True,
+                    return_length=True,
+                    stride=0,
+                    padding="max_length",
+                )
+                processed_examples["input_ids"].append(outputs["input_ids"][0])
+
+            return processed_examples
+
+        return tokenize_for_stage
+
+    for stage in range(num_stages):
+        # print(f"\nProcessing stage {stage}")
+        tokenize_function = create_tokenize_function(stage)
+
         tokenized_dataset = hf_dataset.map(
-            lambda x: tokenize_for_curriculum(x, i),
+            tokenize_function,
             batched=True,
             remove_columns=hf_dataset["train"].column_names,
         )
+
         curriculum_datasets.append(tokenized_dataset)
 
+        # Debug: print example from train and test for comparison
+        # if len(tokenized_dataset["train"]) > 0:
+        #     print(f"\nStage {stage} train example:")
+        #     print(tokenizer.decode(tokenized_dataset["train"][0]["input_ids"]))
+        #     if len(tokenized_dataset["test"]) > 0:
+        #         print(f"\nStage {stage} test example (should be complete):")
+        #         print(tokenizer.decode(tokenized_dataset["test"][0]["input_ids"]))
+
     return curriculum_datasets
+
+
+def split_search_path(path_list, stage, num_stages=10):
+    """
+    Splits search paths for curriculum learning.
+    """
+    all_splits = []
+    for path in path_list:
+        # Get comma positions
+        comma_positions = [i for i, char in enumerate(path) if char == ","]
+
+        if stage == num_stages - 1:
+            split_path = path
+        elif not comma_positions:
+            split_path = path
+        else:
+            if stage == 0:
+                split_position = comma_positions[0]
+            else:
+                num_commas = max(
+                    1, int((stage + 1) * len(comma_positions) / num_stages)
+                )
+                split_position = comma_positions[num_commas - 1]
+            split_path = path[:split_position]
+
+        all_splits.append(split_path)
+
+    return all_splits
 
 
 def get_tokenizer(tok_data: DictConfig):
