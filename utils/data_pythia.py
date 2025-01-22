@@ -39,6 +39,7 @@ class Datamodule(LightningDataModule):
 
     def connect(self, max_seq_length: Optional[int] = None) -> None:
         self.max_seq_length = -1 if max_seq_length is None else max_seq_length
+        return self
 
     def train_dataloader(self):
         return DataLoader(

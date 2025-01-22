@@ -31,34 +31,61 @@ class LitLLM(L.LightningModule):
         self.preprocessor = preprocessor
         self.stage_num = stage
         _, self.hf_conf = hf_config.get_configs(cfg)
+        self.total_steps = 0
+        self.batches_per_epoch = 0
+        self.total_epochs = 0
 
-        # Track the base step count from previous stages
-        self.base_step = 0
-        # Track the last evaluation step to ensure uniqueness
-        self.last_eval_step = 0
+    def save_training_state(self, stage):
+        current_total_step = (
+            self.total_steps + self.trainer.current_epoch * self.batches_per_epoch
+        )
+        checkpoint = {
+            "optimizer": self.trainer.optimizers[0].state_dict(),
+            "scheduler": self.trainer.lr_scheduler_configs[0].scheduler.state_dict(),
+            "stage": stage,
+            "total_steps": current_total_step,
+            "total_epochs": self.total_epochs + self.trainer.current_epoch,
+        }
+        save_path = os.path.join(
+            self.cfg.convert_hf.in_path, f"stage_{stage}_training_state.pt"
+        )
+        torch.save(checkpoint, save_path)
 
-    def on_train_epoch_end(self):
-        # Save model after each epoch
+    def load_training_state(self, stage):
+        load_path = os.path.join(
+            self.cfg.convert_hf.in_path, f"stage_{stage-1}_training_state.pt"
+        )
+        if os.path.exists(load_path):
+            checkpoint = torch.load(load_path)
+            self.trainer.optimizers[0].load_state_dict(checkpoint["optimizer"])
+            self.trainer.lr_scheduler_configs[0].scheduler.load_state_dict(
+                checkpoint["scheduler"]
+            )
+            self.total_steps = checkpoint["total_steps"]
+            self.total_epochs = checkpoint["total_epochs"]
+
+    def on_validation_epoch_end(self):
         save_path = os.path.join(self.cfg.convert_hf.in_path, f"stage_{self.stage_num}")
         self.llm.model.to(self.llm.preprocessor.device)
         self.llm.save(save_path)
 
-        # Return model to training device
         self.llm.model.to(self.device)
-        # Get actual training progress
-        true_step = self.base_step + self.global_step
-
-        # If this step was already evaluated, increment by 1
-        if true_step <= self.last_eval_step:
-            true_step = self.last_eval_step + 1
-
-        self.last_eval_step = true_step
-
+        current_total_step = (
+            self.total_steps  # Base from previous stages
+            + self.trainer.current_epoch
+            * self.batches_per_epoch  # Completed epochs in this stage
+        )
+        self.log(
+            "trainer/eval_folder_step",
+            current_total_step,
+            on_epoch=True,
+            sync_dist=True,
+        )
         self.evaluator = CountdownEvaluator(
             config=self.cfg,
             stage=self.stage_num,
             tokenizer=self.preprocessor.tokenizer,
-            step=true_step,
+            step=current_total_step,
         )
         metrics = self.evaluator.evaluate()
         for k, v in metrics.items():
@@ -79,6 +106,23 @@ class LitLLM(L.LightningModule):
         )
         _, loss = self(idx, targets)
         self.log("train_loss", loss, sync_dist=True)
+
+        current_total_step = (
+            self.total_steps  # Base from previous stages
+            + self.trainer.current_epoch
+            * self.batches_per_epoch  # Completed epochs in this stage
+            + batch_idx  # Current progress in this epoch
+        )
+
+        current_total_epoch = self.total_epochs + self.trainer.current_epoch
+
+        self.log("trainer/total_step", current_total_step, sync_dist=True)
+        self.log("total_epoch", current_total_epoch, sync_dist=True)
+        print(current_total_step)
+
+        if self.total_steps % 10 == 0:  # Every 100 steps
+            print(f"\nCurrent LR: {self.trainer.optimizers[0].param_groups[0]['lr']}\n")
+
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -96,20 +140,39 @@ class LitLLM(L.LightningModule):
         )
         return {"val_loss": loss}
 
-    def configure_optimizers(self):
-        warmup_steps = 10
-        optimizer = torch.optim.AdamW(
-            self.llm.model.parameters(), lr=0.0002, weight_decay=0.0, betas=(0.9, 0.95)
-        )
-        scheduler = torch.optim.lr_scheduler.LambdaLR(
-            optimizer, lambda step: step / warmup_steps
-        )
-        return [optimizer], [scheduler]
-
     def forward(
         self, idx: torch.Tensor, targets: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         return self.llm(idx, targets)
+
+    def configure_optimizers(self):
+        warmup_steps = 10
+        optimizer = torch.optim.AdamW(
+            [{"params": self.llm.model.parameters(), "initial_lr": 0.0002}],
+            lr=0.0002,
+            weight_decay=0.0,
+            betas=(0.9, 0.95),
+        )
+        scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer,
+            lambda step: min(
+                (
+                    step
+                    + self.total_steps
+                    + (self.trainer.current_epoch * self.batches_per_epoch)
+                )
+                / warmup_steps,
+                1.0,
+            ),
+            last_epoch=self.total_steps - 1,
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+            },
+        }
 
 
 @hydra.main(
@@ -151,14 +214,18 @@ def main(cfg: DictConfig):
 
     logger = WandbLogger(project="sos", name=f"{cfg.model.name}", config=wandb_config)
     sample_idx = 0
+    total_steps = 0
     for stage, data in enumerate(curriculum_datasets):
-        print("lit_model.stage: ", lit_model.stage_num, "stage: ", stage)
-        print(tokenizer.decode(data["train"][sample_idx]["input_ids"]))
         lit_model.stage_num = stage
+        print("lit_model.stage: ", lit_model.stage_num, "stage: ", stage)
+        # print(tokenizer.decode(data["train"][sample_idx]["input_ids"]))
         wandb_config.update({"curriculum_stage": stage})
         logger.experiment.config.update(
             {"curriculum_stage": stage}, allow_val_change=True
         )
+
+        if stage > 0:
+            lit_model.load_training_state(stage)
 
         current_epochs = epochs_per_stage[stage]
         data = Datamodule(
@@ -166,8 +233,13 @@ def main(cfg: DictConfig):
             batch_size=batch_size,
             num_workers=num_workers,
             tokenizer=tokenizer,
-        )
-        data.connect(max_seq_length=cfg.model.block_size)
+        ).connect(max_seq_length=cfg.model.block_size)
+
+        data.setup()
+
+        batches_per_epoch = len(data.train_dataloader())
+        print("batches per epoch:", batches_per_epoch)
+        total_batches_this_stage = batches_per_epoch * current_epochs
 
         if stage == len(curriculum_datasets) - 1:
             checkpoint_callback = ModelCheckpoint(
@@ -185,7 +257,6 @@ def main(cfg: DictConfig):
                 save_top_k=2,
                 mode="min",
             )
-
         trainer = L.Trainer(
             devices=1,
             accelerator="cuda",
@@ -196,19 +267,15 @@ def main(cfg: DictConfig):
             callbacks=[
                 checkpoint_callback,
                 LearningRateMonitor(),
-                EarlyStopping(
-                    monitor="countdown_eval/accuracy",
-                    patience=cfg.cur.max_epochs,
-                    check_on_train_epoch_end=True,
-                    stopping_threshold=0.99,
-                    mode="max",
-                ),
             ],
             logger=logger,
         )
+        lit_model.batches_per_epoch = batches_per_epoch
         trainer.fit(lit_model, data)
-
-        lit_model.base_step += trainer.global_step
+        total_steps += total_batches_this_stage
+        lit_model.total_epochs += current_epochs
+        lit_model.total_steps = total_steps
+        lit_model.save_training_state(stage)
 
     final_save_path = os.path.join(cfg.convert_hf.in_path, f"stage_{num_stages-1}")
     lit_model.llm.model.to(lit_model.llm.preprocessor.device)
