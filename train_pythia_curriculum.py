@@ -31,20 +31,21 @@ class LitLLM(L.LightningModule):
         self.preprocessor = preprocessor
         self.stage_num = stage
         _, self.hf_conf = hf_config.get_configs(cfg)
-        self.total_steps = 0
+        self.total_steps = 0  # Global step count
+        self.global_epoch = 0  # Global epoch count
         self.batches_per_epoch = 0
-        self.total_epochs = 0
+
+    def on_train_epoch_end(self):
+        """Increment global_epoch by 1 after every epoch (even across stages)."""
+        self.global_epoch += 1
 
     def save_training_state(self, stage):
-        current_total_step = (
-            self.total_steps + self.trainer.current_epoch * self.batches_per_epoch
-        )
         checkpoint = {
             "optimizer": self.trainer.optimizers[0].state_dict(),
             "scheduler": self.trainer.lr_scheduler_configs[0].scheduler.state_dict(),
             "stage": stage,
-            "total_steps": current_total_step,
-            "total_epochs": self.total_epochs + self.trainer.current_epoch,
+            "total_steps": self.total_steps,
+            "global_epoch": self.global_epoch,
         }
         save_path = os.path.join(
             self.cfg.convert_hf.in_path, f"stage_{stage}_training_state.pt"
@@ -62,7 +63,7 @@ class LitLLM(L.LightningModule):
                 checkpoint["scheduler"]
             )
             self.total_steps = checkpoint["total_steps"]
-            self.total_epochs = checkpoint["total_epochs"]
+            self.global_epoch = checkpoint["global_epoch"]
 
     def on_validation_epoch_end(self):
         save_path = os.path.join(self.cfg.convert_hf.in_path, f"stage_{self.stage_num}")
@@ -71,9 +72,9 @@ class LitLLM(L.LightningModule):
 
         self.llm.model.to(self.device)
         current_total_step = (
-            self.total_steps  # Base from previous stages
-            + self.trainer.current_epoch
-            * self.batches_per_epoch  # Completed epochs in this stage
+            self.total_steps  # Steps from previous stages
+            + (self.trainer.current_epoch + 1)
+            * self.batches_per_epoch  # Include current epoch
         )
         self.log(
             "trainer/eval_folder_step",
@@ -108,16 +109,14 @@ class LitLLM(L.LightningModule):
         self.log("train_loss", loss, sync_dist=True)
 
         current_total_step = (
-            self.total_steps  # Base from previous stages
+            self.total_steps  # Steps from previous stages
             + self.trainer.current_epoch
-            * self.batches_per_epoch  # Completed epochs in this stage
-            + batch_idx  # Current progress in this epoch
+            * self.batches_per_epoch  # Epochs completed in this stage
+            + batch_idx  # Current batch in this epoch
         )
 
-        current_total_epoch = self.total_epochs + self.trainer.current_epoch
-
         self.log("trainer/total_step", current_total_step, sync_dist=True)
-        self.log("total_epoch", current_total_epoch, sync_dist=True)
+        self.log("total_epoch", self.global_epoch, sync_dist=True)
         print(current_total_step)
 
         if self.total_steps % 10 == 0:  # Every 100 steps
@@ -147,30 +146,37 @@ class LitLLM(L.LightningModule):
 
     def configure_optimizers(self):
         warmup_steps = 10
+        base_lr = 0.0002
+
+        # Start with very small learning rate
         optimizer = torch.optim.AdamW(
-            [{"params": self.llm.model.parameters(), "initial_lr": 0.0002}],
-            lr=0.0002,
+            [{"params": self.llm.model.parameters(), "initial_lr": base_lr}],
+            lr=base_lr,
             weight_decay=0.0,
             betas=(0.9, 0.95),
         )
+
+        def lr_lambda(step):
+            # For warmup, we want to count steps only within the current stage
+            # but maintain the warmed-up LR across stages
+            stage_step = step + (self.trainer.current_epoch * self.batches_per_epoch)
+
+            if self.total_steps == 0:  # First stage
+                return min(stage_step / warmup_steps, 1.0)
+            else:  # Subsequent stages - maintain warmed up LR
+                return 1.0
+
         scheduler = torch.optim.lr_scheduler.LambdaLR(
             optimizer,
-            lambda step: min(
-                (
-                    step
-                    + self.total_steps
-                    + (self.trainer.current_epoch * self.batches_per_epoch)
-                )
-                / warmup_steps,
-                1.0,
-            ),
-            last_epoch=self.total_steps - 1,
+            lr_lambda,
+            last_epoch=-1,  # Always start fresh for scheduler counting
         )
+
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "interval": "step",
+                "interval": "step",  # Update LR every step
             },
         }
 
@@ -212,9 +218,13 @@ def main(cfg: DictConfig):
     model = LLM(GPT(conf), preprocessor=preprocessor, config=conf)
     lit_model = LitLLM(model=model, cfg=cfg, preprocessor=preprocessor, stage=0)
 
-    logger = WandbLogger(project="sos", name=f"{cfg.model.name}", config=wandb_config)
-    sample_idx = 0
-    total_steps = 0
+    logger = WandbLogger(
+        project="sos",
+        name=f"{cfg.model.name}",
+        id="122112",
+        resume="allow",
+        config=wandb_config,
+    )
     for stage, data in enumerate(curriculum_datasets):
         lit_model.stage_num = stage
         print("lit_model.stage: ", lit_model.stage_num, "stage: ", stage)
@@ -240,6 +250,7 @@ def main(cfg: DictConfig):
         batches_per_epoch = len(data.train_dataloader())
         print("batches per epoch:", batches_per_epoch)
         total_batches_this_stage = batches_per_epoch * current_epochs
+        lit_model.batches_per_epoch = batches_per_epoch
 
         if stage == len(curriculum_datasets) - 1:
             checkpoint_callback = ModelCheckpoint(
@@ -270,11 +281,8 @@ def main(cfg: DictConfig):
             ],
             logger=logger,
         )
-        lit_model.batches_per_epoch = batches_per_epoch
         trainer.fit(lit_model, data)
-        total_steps += total_batches_this_stage
-        lit_model.total_epochs += current_epochs
-        lit_model.total_steps = total_steps
+        lit_model.total_steps += batches_per_epoch * current_epochs
         lit_model.save_training_state(stage)
 
     final_save_path = os.path.join(cfg.convert_hf.in_path, f"stage_{num_stages-1}")
