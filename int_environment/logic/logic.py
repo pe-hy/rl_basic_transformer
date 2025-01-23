@@ -31,6 +31,12 @@ class LogicFunction:
 
     def to_string(self):
         return self.name
+    
+    def __str__(self):
+        return self.name
+    
+    def __repr__(self):
+        return self.__str__()
 
 
 class NumericalFunction:
@@ -75,6 +81,12 @@ class Entity:
 
     def to_string(self):
         return self.name
+    
+    def __repr__(self):
+        return self.__str__()
+    
+    def __str__(self):
+        return self.name
 
 
 class LogicStatement:
@@ -111,6 +123,12 @@ class LogicStatement:
                     _graph_index(ent, entity.index)
         for ent in self.operands:
             _graph_index(ent, 0)
+
+    def __str__(self):
+        return f"LogicStatement(logic_function={self.logic_function}, operands={self.operands}, degree={self.degree}, premise={self.premise})"
+
+    def __repr__(self):
+        return self.__str__()
 
     def update_name(self):
         def _update_name(entity):

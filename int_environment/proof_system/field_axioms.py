@@ -58,6 +58,12 @@ class AdditionCommutativity(MetaAxiom):
             "Conclusions": conclusions
         }
 
+    def __str__(self):
+        return f"AdditionCommutativity(input_no={self.input_no}, assumption_size={self.assumption_size}, conclusion_size={self.conclusion_size})"
+
+    def __repr__(self):
+        return self.__str__()
+
     @staticmethod
     def transform_circle_back_names(operands):
         a, b, = operands
@@ -171,6 +177,12 @@ class AdditionAssociativity(MetaAxiom):
             "Assumptions": assumptions,
             "Conclusions": conclusions
         }
+    
+    def __str__(self):
+        return f"AdditionAssociativity(input_no={self.input_no}, assumption_size={self.assumption_size}, conclusion_size={self.conclusion_size})"
+
+    def __repr__(self):
+        return self.__str__()
 
     def transform_gt(self, core_gt, entities):
         all_operands = search_operator_operands_in_gt(core_gt, "add")
@@ -290,6 +302,12 @@ class AdditionZero(MetaAxiom):
             "Conclusions": conclusions
         }
 
+    def __str__(self):
+        return f"AdditionZero(input_no={self.input_no}, assumption_size={self.assumption_size}, conclusion_size={self.conclusion_size})"
+
+    def __repr__(self):
+        return self.__str__()
+
     def extend_core_gt(self, core_gt, entities, transform_gt):
         """
         b = 0 + a, or b = a + 0
@@ -376,6 +394,12 @@ class AdditionSimplification(MetaAxiom):
             "Assumptions": assumptions,
             "Conclusions": conclusions
         }
+    
+    def __str__(self):
+        return f"AdditionSimplification(input_no={self.input_no}, assumption_size={self.assumption_size}, conclusion_size={self.conclusion_size})"
+
+    def __repr__(self):
+        return self.__str__()
 
     def transform_gt(self, core_gt, entities):
         all_operands = search_operator_operands_in_gt(core_gt, "add")
@@ -471,6 +495,12 @@ class MultiplicationCommutativity(MetaAxiom):
             "Assumptions": assumptions,
             "Conclusions": conclusions
         }
+    
+    def __str__(self):
+        return f"MultiplicationCommutativity(input_no={self.input_no}, assumption_size={self.assumption_size}, conclusion_size={self.conclusion_size})"
+
+    def __repr__(self):
+        return self.__str__()
 
     @staticmethod
     def transform_circle_back_names(operands):
@@ -590,6 +620,12 @@ class MultiplicationAssociativity(MetaAxiom):
             "Assumptions": assumptions,
             "Conclusions": conclusions
         }
+    
+    def __str__(self):
+        return f"MultiplicationAssociativity(input_no={self.input_no}, assumption_size={self.assumption_size}, conclusion_size={self.conclusion_size})"
+
+    def __repr__(self):
+        return self.__str__()
 
     def transform_gt(self, core_gt, entities):
         all_operands = search_operator_operands_in_gt(core_gt, "mul")
@@ -709,6 +745,12 @@ class MultiplicationOne(MetaAxiom):
             "Assumptions": assumptions,
             "Conclusions": conclusions
         }
+    
+    def __str__(self):
+        return f"MultiplicationOne(input_no={self.input_no}, assumption_size={self.assumption_size}, conclusion_size={self.conclusion_size})"
+
+    def __repr__(self):
+        return self.__str__()
 
     def extend_core_gt(self, core_gt, entities, transform_gt):
         """

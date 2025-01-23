@@ -5,6 +5,7 @@ import pickle
 import random
 import shutil
 import time
+import logging
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 
@@ -16,6 +17,13 @@ from int_environment.proof_system.all_axioms import all_axioms
 
 random.seed(0)
 
+# Create a new folder for the log files
+log_folder = 'logs'
+os.makedirs(log_folder, exist_ok=True)
+
+# Configure logging
+logging.basicConfig(filename='logs/generate_problems.log', level=logging.INFO, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_operands_when_making_up_conditions(how_to_extend, make_up_conclusions, prover, premise_names, no_atom_ents):
     for config in how_to_extend["makeup_config"]:
@@ -338,6 +346,7 @@ def generate_multiple_problems(num_axioms, length, num_probs, **kwargs):
 
         Problems is a list, each element of which is all the proof steps for an individual theorem
     """
+    logging.info("Starting to generate multiple problems")
     separate_problems = []
     all_steps = []
     all_first_steps = []
@@ -351,10 +360,11 @@ def generate_multiple_problems(num_axioms, length, num_probs, **kwargs):
         for generated_steps_arr in executor.map(_generate_many_problems, num_problems_per_subprocess,
                                                 (generate_problem_args for _ in range(num_sub_works))):
             for generated_steps in generated_steps_arr:
+                logging.info(f"Generated steps: {generated_steps}")
                 all_steps.extend(generated_steps)
                 all_first_steps.append(generated_steps[0])
                 separate_problems.append(generated_steps)
-            print(f'#Generated problems: {len(separate_problems)}')
+            logging.info(f'#Generated problems: {len(separate_problems)}')
 
     random.shuffle(all_steps)
     random.shuffle(all_first_steps)
@@ -366,6 +376,7 @@ def generate_multiple_problems(num_axioms, length, num_probs, **kwargs):
         "all_first": all_first_steps_dataset,
     }
 
+    logging.info("Finished generating multiple problems")
     return multiple_problem_datasets, separate_problems
 
 
