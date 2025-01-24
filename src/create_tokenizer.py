@@ -22,7 +22,7 @@ def get_tokenizer(vocab, cfg):
     tokenizer = Tokenizer(WordLevel(vocab, unk_token="[UNK]"))
     tokenizer.pre_tokenizer = WhitespaceSplit()
     tokenizer.add_special_tokens(["[BOS]", "[PAD]", "[MASK]", "[UNK]", "[EOS]"])
-    tokenizer.save("tokenizer/" + "tokenizer.json")
+    tokenizer.save("../tokenizer/" + "tokenizer.json")
     print("tokenizer saved to:", "tokenizer/" + "tokenizer.json")
     # tokenizer = PreTrainedTokenizerFast(tokenizer_file=f"data/tokenizer.json")
     # tokenizer.eos_token = "[SEP]"
