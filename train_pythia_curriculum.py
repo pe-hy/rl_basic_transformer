@@ -117,7 +117,6 @@ class LitLLM(L.LightningModule):
 
         self.log("trainer/total_step", current_total_step, sync_dist=True)
         self.log("total_epoch", self.global_epoch, sync_dist=True)
-        print(current_total_step)
 
         if self.total_steps % 10 == 0:  # Every 100 steps
             print(f"\nCurrent LR: {self.trainer.optimizers[0].param_groups[0]['lr']}\n")
@@ -157,14 +156,10 @@ class LitLLM(L.LightningModule):
         )
 
         def lr_lambda(step):
-            # For warmup, we want to count steps only within the current stage
-            # but maintain the warmed-up LR across stages
             stage_step = step + (self.trainer.current_epoch * self.batches_per_epoch)
-
-            if self.total_steps == 0:  # First stage
-                return min(stage_step / warmup_steps, 1.0)
-            else:  # Subsequent stages - maintain warmed up LR
-                return 1.0
+            # If we want to reach multiplier of 9.9 over total_steps
+            effective_warmup = (55 * self.batches_per_epoch) / 9.9
+            return stage_step / effective_warmup
 
         scheduler = torch.optim.lr_scheduler.LambdaLR(
             optimizer,
@@ -207,7 +202,6 @@ def main(cfg: DictConfig):
 
     num_stages = len(curriculum_datasets)
     epochs_per_stage = [min(stage + 1, 10) for stage in range(num_stages)]
-    print(epochs_per_stage)
     print(
         "Number of datasets in cur: ",
         num_stages,
@@ -221,7 +215,7 @@ def main(cfg: DictConfig):
     logger = WandbLogger(
         project="sos",
         name=f"{cfg.model.name}",
-        id="122112",
+        id="564165x",
         resume="allow",
         config=wandb_config,
     )
