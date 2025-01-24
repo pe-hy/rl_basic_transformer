@@ -33,7 +33,7 @@ parser.add_argument(
 )
 parser.add_argument("--max_target", type=int, default=30, help="Maximum target number")
 parser.add_argument(
-    "--num_samples", type=int, default=1000, help="Number of data samples to generate"
+    "--num_samples", type=int, default=20000, help="Number of data samples to generate"
 )
 
 # search args
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         if split == "train" or split == "grow":
             num_samples = args.num_samples
         else:
-            num_samples = 5000
+            num_samples = 50000
 
         zero_count = 0
         for t in tqdm.tqdm(range(num_samples)):

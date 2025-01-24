@@ -75,7 +75,7 @@ def get_data_with_filtering(cfg: DictConfig, tokenizer):
 
         filtered_data = [original_dataset[split][idx] for idx in valid_indices]
 
-        output_file = f"{split}1_b4_t30_n500000_dfs_filtered.json"
+        output_file = f"{split}1_b4_t30_n2000000_dfs_filtered.json"
         output_path = os.path.join(output_dir, output_file)
         logger.info(f"Saving filtered {split} data to {output_path}")
 
