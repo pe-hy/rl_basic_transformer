@@ -281,7 +281,7 @@ def main(cfg: DictConfig):
     logger = WandbLogger(
         project="sos",
         name=f"{cfg.model.name}",
-        id="breab",
+        id="breabg",
         resume="allow",
         config=wandb_config,
     )
