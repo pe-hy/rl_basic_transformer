@@ -39,17 +39,17 @@ data:
 
 model:
   name: "PAST-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs"
-  batch_size: 24
+  batch_size: 48
   accumulate_grad_batches: 1
   block_size: 4096
   epochs: 100
-  n_layer: 12
-  n_head: 8
-  n_embd: 256
-  vocab_size: 410
-  padded_vocab_size: 410
-  bos_id: 404
-  eos_id: 408
+  n_layer: 6
+  n_head: 4
+  n_embd: 64
+  vocab_size: 420
+  padded_vocab_size: 420
+  bos_id: 412
+  eos_id: 416
   # checkpoint_dir: "model/${dl_model.full_path}"
   tokenizer_path: "${tok_data.tokenizer_path}"
   # past specific:

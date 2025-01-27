@@ -14,23 +14,39 @@ from config import hf_config
 from litgpt.config import configs, Config, name_to_config
 from litgpt.model import GPT
 from litgpt.api import Preprocessor
-
+import math
 import json
 import os
+
+from transformers import get_cosine_schedule_with_warmup
+
+# def get_cosine_schedule_with_warmup(
+#     optimizer: torch.optim.Optimizer,
+#     num_warmup_steps: int,
+#     num_training_steps: int,
+#     num_cycles: float = 0.5,
+#     last_epoch: int = -1,
+# ):
+#     """
+#     Create a schedule with a learning rate that decreases following the values of the cosine function.
+#     """
+
+#     def lr_lambda(current_step):
+#         if current_step < num_warmup_steps:
+#             return float(current_step) / float(max(1, num_warmup_steps))
+#         progress = float(current_step - num_warmup_steps) / float(
+#             max(1, num_training_steps - num_warmup_steps)
+#         )
+#         return max(
+#             0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+#         )
+
+#     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
 class LitLLM(L.LightningModule):
     def __init__(self, cfg, model, preprocessor, trainer_ckpt_path=None):
         super().__init__()
-
-        # self.llm = LLM.load(
-        #     checkpoint_dir, tokenizer_dir=tokenizer_dir, distribute=None
-        # )
-        # return cls(
-        #     model=model, preprocessor=preprocessor, prompt_style=prompt_style,
-        #     config=config, checkpoint_dir=checkpoint_dir, fabric=fabric, generate_strategy=None,
-        #     kv_cache_initialized=False, fixed_kv_cache_size=False
-        # )
 
         self.llm = model
         self.cfg = cfg
@@ -68,14 +84,75 @@ class LitLLM(L.LightningModule):
         return {"val_loss": loss}
 
     def configure_optimizers(self):
-        warmup_steps = 10
-        optimizer = torch.optim.AdamW(
-            self.llm.model.parameters(), lr=0.0002, weight_decay=0.0, betas=(0.9, 0.95)
-        )
-        scheduler = torch.optim.lr_scheduler.LambdaLR(
-            optimizer, lambda step: step / warmup_steps
-        )
+        optimizer = torch.optim.AdamW(self.parameters(), lr=5e-3)
+        scheduler = {
+            "scheduler": get_cosine_schedule_with_warmup(
+                optimizer, num_warmup_steps=4167, num_training_steps=416700  # TODO:
+            ),
+            "interval": "step",
+        }
         return [optimizer], [scheduler]
+
+    # def configure_optimizers(self):
+    #     warmup_steps = 10
+    #     optimizer = torch.optim.AdamW(
+    #         self.llm.model.parameters(), lr=0.0002, weight_decay=0.0, betas=(0.9, 0.95)
+    #     )
+    #     scheduler = torch.optim.lr_scheduler.LambdaLR(
+    #         optimizer, lambda step: step / warmup_steps
+    #     )
+    #     return [optimizer], [scheduler]
+
+    # def configure_optimizers(self):
+    #     """Configure optimizer with weight decay separation and cosine LR schedule."""
+    #     # Separate parameters for weight decay
+    #     decay_parameters = []
+    #     no_decay_parameters = []
+
+    #     for n, p in self.named_parameters():
+    #         if p.requires_grad:
+    #             if any(nd in n for nd in ["bias", "LayerNorm.weight"]):
+    #                 no_decay_parameters.append(p)
+    #             else:
+    #                 decay_parameters.append(p)
+
+    #     optimizer_grouped_parameters = [
+    #         {
+    #             "params": decay_parameters,
+    #             "weight_decay": self.cfg.optim.weight_decay,
+    #         },
+    #         {
+    #             "params": no_decay_parameters,
+    #             "weight_decay": 0.0,
+    #         },
+    #     ]
+
+    #     optimizer = torch.optim.AdamW(
+    #         optimizer_grouped_parameters,
+    #         lr=self.cfg.optim.learning_rate,
+    #         betas=(self.cfg.optim.beta1, self.cfg.optim.beta2),
+    #         eps=self.cfg.optim.eps,
+    #     )
+
+    #     # Calculate total training steps
+    #     total_steps = self.trainer.estimated_stepping_batches
+    #     warmup_steps = int(total_steps * self.cfg.optim.warmup_ratio)
+
+    #     scheduler = get_cosine_schedule_with_warmup(
+    #         optimizer,
+    #         num_warmup_steps=warmup_steps,
+    #         num_training_steps=total_steps,
+    #     )
+
+    #     scheduler_config = {
+    #         "scheduler": scheduler,
+    #         "interval": "step",
+    #         "frequency": 1,
+    #         "monitor": "val_loss",
+    #         "name": "cosine_schedule",
+    #     }
+
+    #     return {"optimizer": optimizer, "lr_scheduler": scheduler_config}
 
     def forward(
         self, idx: torch.Tensor, targets: Optional[torch.Tensor] = None

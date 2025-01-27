@@ -4,7 +4,7 @@ import torch
 from litgpt import LLM
 from litgpt.data import Alpaca2k
 import lightning as L
-from utils.data_pythia import *
+from utils.data_pythia_cur import *
 import hydra
 from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig, OmegaConf
@@ -21,6 +21,39 @@ from litgpt.api import Preprocessor
 import json
 import os
 import logging
+import math
+
+
+def get_cosine_schedule_with_warmup(
+    optimizer: torch.optim.Optimizer,
+    num_warmup_steps: int,
+    num_training_steps: int,
+    num_cycles: float = 0.5,
+    last_epoch: int = -1,
+):
+    """
+    Create a schedule with a learning rate that decreases following the values of the cosine function between the
+    initial lr set in the optimizer to 0, with warmup period at the beginning.
+
+    Args:
+        optimizer: The optimizer for which to schedule the learning rate
+        num_warmup_steps: The number of steps for the warmup phase
+        num_training_steps: The total number of training steps
+        num_cycles: The number of waves in the cosine schedule (default: 0.5)
+        last_epoch: The index of the last epoch when resuming training
+    """
+
+    def lr_lambda(current_step):
+        if current_step < num_warmup_steps:
+            return float(current_step) / float(max(1, num_warmup_steps))
+        progress = float(current_step - num_warmup_steps) / float(
+            max(1, num_training_steps - num_warmup_steps)
+        )
+        return max(
+            0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+        )
+
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
 class LitLLM(L.LightningModule):
@@ -34,36 +67,37 @@ class LitLLM(L.LightningModule):
         self.total_steps = 0  # Global step count
         self.global_epoch = 0  # Global epoch count
         self.batches_per_epoch = 0
+        self.curriculum_datasets = None
 
     def on_train_epoch_end(self):
         """Increment global_epoch by 1 after every epoch (even across stages)."""
         self.global_epoch += 1
 
-    def save_training_state(self, stage):
-        checkpoint = {
-            "optimizer": self.trainer.optimizers[0].state_dict(),
-            "scheduler": self.trainer.lr_scheduler_configs[0].scheduler.state_dict(),
-            "stage": stage,
-            "total_steps": self.total_steps,
-            "global_epoch": self.global_epoch,
-        }
-        save_path = os.path.join(
-            self.cfg.convert_hf.in_path, f"stage_{stage}_training_state.pt"
-        )
-        torch.save(checkpoint, save_path)
+    # def save_training_state(self, stage):
+    #     checkpoint = {
+    #         "optimizer": self.trainer.optimizers[0].state_dict(),
+    #         "scheduler": self.trainer.lr_scheduler_configs[0].scheduler.state_dict(),
+    #         "stage": stage,
+    #         "total_steps": self.total_steps,
+    #         "global_epoch": self.global_epoch,
+    #     }
+    #     save_path = os.path.join(
+    #         self.cfg.convert_hf.in_path, f"stage_{stage}_training_state.pt"
+    #     )
+    #     torch.save(checkpoint, save_path)
 
-    def load_training_state(self, stage):
-        load_path = os.path.join(
-            self.cfg.convert_hf.in_path, f"stage_{stage-1}_training_state.pt"
-        )
-        if os.path.exists(load_path):
-            checkpoint = torch.load(load_path)
-            self.trainer.optimizers[0].load_state_dict(checkpoint["optimizer"])
-            self.trainer.lr_scheduler_configs[0].scheduler.load_state_dict(
-                checkpoint["scheduler"]
-            )
-            self.total_steps = checkpoint["total_steps"]
-            self.global_epoch = checkpoint["global_epoch"]
+    # def load_training_state(self, stage):
+    #     load_path = os.path.join(
+    #         self.cfg.convert_hf.in_path, f"stage_{stage-1}_training_state.pt"
+    #     )
+    #     if os.path.exists(load_path):
+    #         checkpoint = torch.load(load_path)
+    #         self.trainer.optimizers[0].load_state_dict(checkpoint["optimizer"])
+    #         self.trainer.lr_scheduler_configs[0].scheduler.load_state_dict(
+    #             checkpoint["scheduler"]
+    #         )
+    #         self.total_steps = checkpoint["total_steps"]
+    #         self.global_epoch = checkpoint["global_epoch"]
 
     def on_validation_epoch_end(self):
         save_path = os.path.join(self.cfg.convert_hf.in_path, f"stage_{self.stage_num}")
@@ -117,13 +151,12 @@ class LitLLM(L.LightningModule):
 
         self.log("trainer/total_step", current_total_step, sync_dist=True)
         self.log("total_epoch", self.global_epoch, sync_dist=True)
-
         if self.total_steps % 10 == 0:  # Every 100 steps
             print(f"\nCurrent LR: {self.trainer.optimizers[0].param_groups[0]['lr']}\n")
 
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx):
         # if self.global_step == 0:
         #     # print(batch["input_ids"])
         #     # print(batch["input_ids"].shape)
@@ -134,7 +167,13 @@ class LitLLM(L.LightningModule):
         )
         logits, loss = self(idx, targets)
         self.log(
-            "val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True
+            "trainer/val_loss",
+            loss,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+            add_dataloader_idx=True,  # This appends the dataloader index to the metric name
         )
         return {"val_loss": loss}
 
@@ -144,34 +183,59 @@ class LitLLM(L.LightningModule):
         return self.llm(idx, targets)
 
     def configure_optimizers(self):
-        warmup_steps = 10
-        base_lr = 0.0002
+        """
+        Configure optimizer and learning rate scheduler for curriculum learning.
+        Uses AdamW with weight decay and cosine learning rate schedule with warmup.
+        """
+        # Separate parameters that should have weight decay from those that shouldn't
+        decay_parameters = []
+        no_decay_parameters = []
 
-        # Start with very small learning rate
+        for n, p in self.named_parameters():
+            if p.requires_grad:
+                if any(nd in n for nd in ["bias", "LayerNorm.weight"]):
+                    no_decay_parameters.append(p)
+                else:
+                    decay_parameters.append(p)
+
+        optimizer_grouped_parameters = [
+            {
+                "params": decay_parameters,
+                "weight_decay": self.cfg.optim.weight_decay,
+            },
+            {
+                "params": no_decay_parameters,
+                "weight_decay": 0.0,
+            },
+        ]
+
         optimizer = torch.optim.AdamW(
-            [{"params": self.llm.model.parameters(), "initial_lr": base_lr}],
-            lr=base_lr,
-            weight_decay=0.0,
-            betas=(0.9, 0.95),
+            optimizer_grouped_parameters,
+            lr=self.cfg.optim.learning_rate,
+            betas=(self.cfg.optim.beta1, self.cfg.optim.beta2),
+            eps=self.cfg.optim.eps,
         )
 
-        def lr_lambda(step):
-            stage_step = step + (self.trainer.current_epoch * self.batches_per_epoch)
-            # If we want to reach multiplier of 9.9 over total_steps
-            effective_warmup = (55 * self.batches_per_epoch) / 9.9
-            return stage_step / effective_warmup
+        # Calculate total steps across all curriculum stages
+        opt_steps = self.trainer.estimated_stepping_batches
 
-        scheduler = torch.optim.lr_scheduler.LambdaLR(
+        # Compute warmup steps (typically 10% of total steps)
+        warmup_steps = int(opt_steps * self.cfg.optim.warmup_ratio)
+
+        scheduler = get_cosine_schedule_with_warmup(
             optimizer,
-            lr_lambda,
-            last_epoch=-1,  # Always start fresh for scheduler counting
+            num_warmup_steps=warmup_steps,
+            num_training_steps=opt_steps,
+            num_cycles=0.5,  # Half cycle for smoother transition between stages
         )
 
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "interval": "step",  # Update LR every step
+                "interval": "step",
+                "frequency": 1,
+                "name": "cosine_schedule",
             },
         }
 
@@ -198,10 +262,11 @@ def main(cfg: DictConfig):
     preprocessor = Preprocessor(
         tokenizer, device="cuda" if torch.cuda.is_available() else "cpu"
     )
-    curriculum_datasets = get_curriculum(cfg, tokenizer)
+    curriculum_datasets = get_data(cfg, tokenizer)
 
     num_stages = len(curriculum_datasets)
-    epochs_per_stage = [min(stage + 1, 10) for stage in range(num_stages)]
+    epochs_per_stage = cfg.cur.epochs_per_stage
+
     print(
         "Number of datasets in cur: ",
         num_stages,
@@ -211,14 +276,16 @@ def main(cfg: DictConfig):
 
     model = LLM(GPT(conf), preprocessor=preprocessor, config=conf)
     lit_model = LitLLM(model=model, cfg=cfg, preprocessor=preprocessor, stage=0)
+    lit_model.curriculum_datasets = curriculum_datasets
 
     logger = WandbLogger(
         project="sos",
         name=f"{cfg.model.name}",
-        id="564165x",
+        id="breab",
         resume="allow",
         config=wandb_config,
     )
+
     for stage, data in enumerate(curriculum_datasets):
         lit_model.stage_num = stage
         print("lit_model.stage: ", lit_model.stage_num, "stage: ", stage)
@@ -228,8 +295,8 @@ def main(cfg: DictConfig):
             {"curriculum_stage": stage}, allow_val_change=True
         )
 
-        if stage > 0:
-            lit_model.load_training_state(stage)
+        # if stage > 0:
+        #     lit_model.load_training_state(stage)
 
         current_epochs = epochs_per_stage[stage]
         data = Datamodule(
@@ -237,6 +304,7 @@ def main(cfg: DictConfig):
             batch_size=batch_size,
             num_workers=num_workers,
             tokenizer=tokenizer,
+            small_val=curriculum_datasets[0]["val"],
         ).connect(max_seq_length=cfg.model.block_size)
 
         data.setup()
@@ -256,7 +324,7 @@ def main(cfg: DictConfig):
             )
         else:
             checkpoint_callback = ModelCheckpoint(
-                monitor="val_loss",
+                monitor="trainer/val_loss/dataloader_idx_0",
                 dirpath=f"temp/{cfg.model.name}/checkpoints/stage_{stage}",
                 filename="{epoch:02d}-{val_loss:.4f}",
                 save_top_k=2,
@@ -271,13 +339,13 @@ def main(cfg: DictConfig):
             val_check_interval=1.0,
             callbacks=[
                 checkpoint_callback,
-                LearningRateMonitor(),
+                LearningRateMonitor(logging_interval="step"),
             ],
             logger=logger,
         )
         trainer.fit(lit_model, data)
         lit_model.total_steps += batches_per_epoch * current_epochs
-        lit_model.save_training_state(stage)
+        # lit_model.save_training_state(stage)
 
     final_save_path = os.path.join(cfg.convert_hf.in_path, f"stage_{num_stages-1}")
     lit_model.llm.model.to(lit_model.llm.preprocessor.device)
