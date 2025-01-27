@@ -11,7 +11,8 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      optim.lr: choice(5e-1, 4e-1, 3e-1, 2e-1, 1e-1, 1e-2, 2e-2, 3e-2, 4e-2, 5e-2, 1e-3, 2e-3, 3e-3, 4e-3, 5e-3)
+      optim.lr: choice(5e-1, 4e-1, 3e-1, 2e-1, 1e-1, 1e-2, 2e-2, 3e-2)
+      # 4e-2, 5e-2, 1e-3, 2e-3, 3e-3, 4e-3, 5e-3)
   launcher:
     name: Pythia-multirun
     _target_: hydra_plugins.hydra_submitit_launcher.submitit_launcher.SlurmLauncher
@@ -28,19 +29,20 @@ hydra:
     max_num_timeout: 0
 
 tok_data:
-  train_file: "../data/sos/train1_b4_t30_n200000_dfs.json"
-  val_target_file: "../data/sos/val_target1_b4_t30_n200000_dfs.json"
-  val_file: "../data/sos/val1_b4_t30_n200000_dfs.json"
-  tokenizer_path: "${model.tokenizer_path}/tokenizer.json"
+  train_file: "../data/sos_filtered/train1_b4_t30_n2000000_dfs_filtered.json"
+  val_target_file: "../data/sos_filtered/test_b4_t30_n2000000_dfs_filtered.json"
+  val_file: "../data/sos_filtered/val1_b4_t30_n2000000_dfs_filtered.json"
+  tokenizer_path: "tokenizer/tokenizer.json"
 
 data:
   datapath: data
-  train_file: "sos/train1_b4_t30_n200000_dfs.json"
-  val_target_file: "sos/val_target1_b4_t30_n200000_dfs.json"
-  val_file: "sos/val1_b4_t30_n200000_dfs.json"
+  train_file: "sos_filtered/train1_b4_t30_n2000000_dfs_filtered.json"
+  val_target_file: "sos_filtered/test1_b4_t30_n2000000_dfs_filtered.json"
+  val_file: "sos_filtered/val1_b4_t30_n2000000_dfs_filtered.json"
   num_train: 2e5
-  num_workers: 16
-
+  num_val: 512
+  num_workers: 64
+  
 model:
   name: karolina-Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs-${optim.lr}
   batch_size: 48
