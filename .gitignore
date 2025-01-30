@@ -1,3 +1,8 @@
+scripts/.local
+scripts/.cache
+.bash_history
+.cache
+.local
 experiment.ipynb
 experiment.py
 logs/
