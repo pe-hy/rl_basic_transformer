@@ -134,8 +134,8 @@ def parse_trajectory(search_path, mode="dt"):
     if predicted_result != target:
         ret = "Invalid path: Final operation does not result in target."
         return ret
-    # if ret == "Valid path.":
-    #     ret = validate_search_path(raw_search_path=search_path)
+    if ret == "Valid path.":
+        ret = validate_search_path(raw_search_path=search_path)
 
     return ret
 

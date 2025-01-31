@@ -21,8 +21,12 @@ import os
 from transformers import get_cosine_schedule_with_warmup
 
 import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logging.info("Starting training...")
+
 
 class LitLLM(L.LightningModule):
     def __init__(self, cfg, model, preprocessor, train_batches, trainer_ckpt_path=None):
@@ -67,8 +71,12 @@ class LitLLM(L.LightningModule):
 
     def configure_optimizers(self):
         warmup_steps = 10
-        optimizer = torch.optim.AdamW(self.llm.model.parameters(), lr=0.0002, weight_decay=0.0, betas=(0.9, 0.95))
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda step: step / warmup_steps)
+        optimizer = torch.optim.AdamW(
+            self.llm.model.parameters(), lr=0.0002, weight_decay=0.0, betas=(0.9, 0.95)
+        )
+        scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer, lambda step: step / warmup_steps
+        )
         return [optimizer], [scheduler]
 
     # def configure_optimizers(self):
@@ -92,7 +100,7 @@ class LitLLM(L.LightningModule):
 
 @hydra.main(
     config_path="config",
-    config_name="config_pythia_karolina_singlerun",
+    config_name="config_pythia",
     version_base=None,
 )
 def main(cfg: DictConfig):
@@ -123,7 +131,9 @@ def main(cfg: DictConfig):
         model=model, cfg=cfg, train_batches=train_size, preprocessor=preprocessor
     )
 
-    logger = WandbLogger(project="sos_new", name=f"{cfg.model.name}", config=wandb_config)
+    logger = WandbLogger(
+        project="sos_new", name=f"{cfg.model.name}", config=wandb_config
+    )
 
     checkpoint_callback = ModelCheckpoint(
         monitor="countdown_eval/accuracy",  # what metric to track

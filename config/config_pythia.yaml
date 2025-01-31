@@ -24,8 +24,8 @@ data:
   num_workers: 64
 
 model:
-  name: "Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs-cosine"
-  batch_size: 128
+  name: "Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs-increasing-extra_valid"
+  batch_size: 48
   accumulate_grad_batches: 1
   block_size: 4096
   epochs: 100
@@ -34,8 +34,8 @@ model:
   n_embd: 64
   vocab_size: 420
   padded_vocab_size: 420
-  bos_id: 412
-  eos_id: 416
+  bos_id: 410
+  eos_id: 414
   
 eval:
   num_examples: 512
@@ -48,4 +48,4 @@ convert_hf:
   out_path: "temp/hf_${model.name}"
 
 optim:
-  lr: 5e-2
+  lr: 1e-2

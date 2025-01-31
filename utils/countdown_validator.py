@@ -20,7 +20,7 @@ def validate_search_path(raw_search_path):
         if match_end == 0:
             return "Invalid search_path: Missing '.' indicating the end of the goal statement."
 
-        return search_path[match_start.start():match_end]
+        return search_path[match_start.start() : match_end]
 
     search_path = strip_search_path(raw_search_path)
     if not search_path.startswith("S"):
@@ -44,13 +44,17 @@ def validate_search_path(raw_search_path):
                     graph.nodes[current_node]["numbers"] = nums
             elif action.startswith("E"):
                 # Handle operations
-                match = re.match(r"E\s*(\d+\s*[+\-*/]\s*\d+)\s*=\s*(\d+)\s*R\s*\[ ([^\]]+)\]", action)
+                match = re.match(
+                    r"E\s*(\d+\s*[+\-*/]\s*\d+)\s*=\s*(\d+)\s*R\s*\[ ([^\]]+)\]", action
+                )
                 if match:
                     operation = match.group(1).strip()
                     result = int(match.group(2).strip())
                     operation_label = f"{operation} = {result}"
                     # Extract operands
-                    left_operand, operator, right_operand = re.match(r"(\d+)\s*([+\-*/])\s*(\d+)", operation).groups()
+                    left_operand, operator, right_operand = re.match(
+                        r"(\d+)\s*([+\-*/])\s*(\d+)", operation
+                    ).groups()
                     left_operand, right_operand = int(left_operand), int(right_operand)
                     # Update numbers
                     numbers_counter = Counter(graph.nodes[current_node]["numbers"])
@@ -59,7 +63,9 @@ def validate_search_path(raw_search_path):
                     numbers_counter.subtract([left_operand, right_operand])
 
                     # Ensure non-negative counts (avoid negative values)
-                    numbers_counter += Counter()  # This removes any keys with negative counts
+                    numbers_counter += (
+                        Counter()
+                    )  # This removes any keys with negative counts
 
                     # Construct the updated numbers list
                     updated_numbers = []
@@ -69,7 +75,9 @@ def validate_search_path(raw_search_path):
                     # Construct the updated numbers list
                     updated_numbers = []
                     for num, count in numbers_counter.items():
-                        updated_numbers.extend([num] * count)  # Preserve duplicates correctly
+                        updated_numbers.extend(
+                            [num] * count
+                        )  # Preserve duplicates correctly
                     updated_numbers.append(result)
                     updated_numbers.sort()
                     next_node = f"{current_node}-{result}"
@@ -92,7 +100,9 @@ def validate_search_path(raw_search_path):
                     if node_id in node_map:
                         current_node = node_map[node_id]
                     else:
-                        return f"Error: Invalid move to node ID {node_id}, node not found."
+                        return (
+                            f"Error: Invalid move to node ID {node_id}, node not found."
+                        )
 
             elif action.startswith("N"):
                 # Non-goal (failure) path
@@ -105,7 +115,9 @@ def validate_search_path(raw_search_path):
                     next_node = f"{current_node}-{generated}"
                     if next_node not in graph:
                         graph.add_node(next_node, numbers=[])  # Leaf node remains empty
-                    graph.add_edge(current_node, next_node, operation=f"N {generated} ≠ {target}")
+                    graph.add_edge(
+                        current_node, next_node, operation=f"N {generated} ≠ {target}"
+                    )
                     current_node = parent_stack.pop()  # Move back up to the parent node
             elif action.startswith("O"):
                 # Handle the goal state
@@ -118,7 +130,9 @@ def validate_search_path(raw_search_path):
                     next_node = f"{current_node}-goal"
                     if next_node not in graph:
                         graph.add_node(next_node, numbers=[])  # Goal node is empty
-                    graph.add_edge(current_node, next_node, operation=f"Goal: {goal} = {target}")
+                    graph.add_edge(
+                        current_node, next_node, operation=f"Goal: {goal} = {target}"
+                    )
 
         return graph
 
@@ -163,7 +177,9 @@ def validate_search_path(raw_search_path):
 
             return "Invalid graph: Root node has no numbers."
 
-        for parent, operation, child in path_operations[:-1]:  # Exclude the goal operation
+        for parent, operation, child in path_operations[
+            :-1
+        ]:  # Exclude the goal operation
 
             match = re.match(r"(\d+)\s*([+\-*/])\s*(\d+)\s*=\s*(\d+)", operation)
             if not match:
@@ -175,7 +191,10 @@ def validate_search_path(raw_search_path):
             result = int(match.group(4))
 
             # Check if numbers used are available
-            if left_operand not in current_numbers or right_operand not in current_numbers:
+            if (
+                left_operand not in current_numbers
+                or right_operand not in current_numbers
+            ):
                 return f"Not available numbers: {left_operand} or {right_operand} not in {current_numbers}"
 
             # Validate the operation
@@ -192,12 +211,16 @@ def validate_search_path(raw_search_path):
             # Update current numbers
             # Use a Counter to track occurrences properly
             expected_counter = Counter(current_numbers)
-            expected_counter.subtract([left_operand, right_operand])  # Remove one occurrence of each
+            expected_counter.subtract(
+                [left_operand, right_operand]
+            )  # Remove one occurrence of each
             expected_counter += Counter()  # Remove negative counts
             expected_counter[result] += 1  # Add the result
 
             # Convert Counter back to a sorted list
-            expected_numbers = sorted(sum([[num] * count for num, count in expected_counter.items()], []))
+            expected_numbers = sorted(
+                sum([[num] * count for num, count in expected_counter.items()], [])
+            )
 
             # Check the output array in the child node
             child_numbers = graph.nodes[child].get("numbers")
@@ -216,6 +239,6 @@ def validate_search_path(raw_search_path):
         if final_numbers is None or goal_value not in final_numbers:
             return f"Wrong input output list: Final state numbers {final_numbers} do not contain goal {goal_value}."
 
-        return "Valid path"
+        return "Valid path."
 
     return validate_path(graph)
