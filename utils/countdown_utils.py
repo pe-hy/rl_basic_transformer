@@ -137,34 +137,6 @@ def parse_trajectory(search_path, mode="dt"):
     # if ret == "Valid path.":
     #     ret = validate_search_path(raw_search_path=search_path)
 
-    # # get the last current state, operations before the goal reached statement, and extract the operations
-    # operation_list = re.findall(r"Current State: \d+:\[.*?\], Operations: \[(.*?)\]", search_path[:goal_line.start()])[
-    #     -1].split(', ')
-    # operation_list = [op.replace("'", "") for op in operation_list]
-    # operation_list += [final_operation]
-
-    # # Verify each operation and keep track of the numbers involved
-    # available_numbers = nums
-    # for operation in operation_list:
-    #     # Verify the operation
-    #     try:
-    #         left, right = operation.split('=')
-    #     except:
-    #         return f"Could not split operation into lhs, rhs"
-    #     try:
-    #         if eval(left) != int(right):
-    #             return f"Invalid operation: {operation}"
-    #     except Exception as e:
-    #         return f"Error in evaluating operation {operation}: {e}"
-    #     # get the numbers involved
-    #     used_numbers = re.findall(r"\d+", left)
-    #     for n in used_numbers:
-    #         if int(n) not in available_numbers:
-    #             return f"Invalid operation: {operation}, number {n} not available in {available_numbers}"
-
-    #     available_numbers = [n for n in available_numbers if n not in used_numbers]
-    #     available_numbers.append(int(right))
-
     return ret
 
 

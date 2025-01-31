@@ -7,7 +7,6 @@ datasets
 transformers
 lightning
 hydra-core
-hydra-core
 arrow
 litgpt[all]
 lightning-cloud

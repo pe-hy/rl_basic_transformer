@@ -10,7 +10,7 @@ hydra:
 
 tok_data:
   train_file: "../data/sos_filtered/train1_b4_t30_n2000000_dfs_filtered.json"
-  val_target_file: "../data/sos_filtered/test_b4_t30_n2000000_dfs_filtered.json"
+  val_target_file: "../data/sos_filtered/test1_b4_t30_n2000000_dfs_filtered.json"
   val_file: "../data/sos_filtered/val1_b4_t30_n2000000_dfs_filtered.json"
   tokenizer_path: "tokenizer/tokenizer.json"
 

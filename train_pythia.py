@@ -66,17 +66,23 @@ class LitLLM(L.LightningModule):
         return {"val_loss": loss}
 
     def configure_optimizers(self):
-        n_steps = self.cfg.model.epochs * self.train_batches
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.cfg.optim.lr)
-        scheduler = {
-            "scheduler": get_cosine_schedule_with_warmup(
-                optimizer,
-                num_warmup_steps=n_steps // 100,
-                num_training_steps=n_steps,
-            ),
-            "interval": "step",
-        }
+        warmup_steps = 10
+        optimizer = torch.optim.AdamW(self.llm.model.parameters(), lr=0.0002, weight_decay=0.0, betas=(0.9, 0.95))
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda step: step / warmup_steps)
         return [optimizer], [scheduler]
+
+    # def configure_optimizers(self):
+    #     n_steps = self.cfg.model.epochs * self.train_batches
+    #     optimizer = torch.optim.AdamW(self.parameters(), lr=self.cfg.optim.lr)
+    #     scheduler = {
+    #         "scheduler": get_cosine_schedule_with_warmup(
+    #             optimizer,
+    #             num_warmup_steps=n_steps // 100,
+    #             num_training_steps=n_steps,
+    #         ),
+    #         "interval": "step",
+    #     }
+    #     return [optimizer], [scheduler]
 
     def forward(
         self, idx: torch.Tensor, targets: Optional[torch.Tensor] = None
@@ -86,7 +92,7 @@ class LitLLM(L.LightningModule):
 
 @hydra.main(
     config_path="config",
-    config_name="config_pythia_lumi_singlerun",
+    config_name="config_pythia_karolina_singlerun",
     version_base=None,
 )
 def main(cfg: DictConfig):
@@ -117,7 +123,7 @@ def main(cfg: DictConfig):
         model=model, cfg=cfg, train_batches=train_size, preprocessor=preprocessor
     )
 
-    logger = WandbLogger(project="sos_lumi", name=f"{cfg.model.name}", config=wandb_config)
+    logger = WandbLogger(project="sos_new", name=f"{cfg.model.name}", config=wandb_config)
 
     checkpoint_callback = ModelCheckpoint(
         monitor="countdown_eval/accuracy",  # what metric to track
