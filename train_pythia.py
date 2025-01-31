@@ -20,6 +20,9 @@ import os
 
 from transformers import get_cosine_schedule_with_warmup
 
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.info("Starting training...")
 
 class LitLLM(L.LightningModule):
     def __init__(self, cfg, model, preprocessor, train_batches, trainer_ckpt_path=None):
@@ -83,7 +86,7 @@ class LitLLM(L.LightningModule):
 
 @hydra.main(
     config_path="config",
-    config_name="config_pythia_karolina_multirun",
+    config_name="config_pythia_lumi_singlerun",
     version_base=None,
 )
 def main(cfg: DictConfig):
@@ -114,7 +117,7 @@ def main(cfg: DictConfig):
         model=model, cfg=cfg, train_batches=train_size, preprocessor=preprocessor
     )
 
-    logger = WandbLogger(project="sos", name=f"{cfg.model.name}", config=wandb_config)
+    logger = WandbLogger(project="sos_lumi", name=f"{cfg.model.name}", config=wandb_config)
 
     checkpoint_callback = ModelCheckpoint(
         monitor="countdown_eval/accuracy",  # what metric to track

@@ -1,3 +1,6 @@
+job.sh
+.cache
+.local
 .bash_history
 experiment.ipynb
 experiment.py
