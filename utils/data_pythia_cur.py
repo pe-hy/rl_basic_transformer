@@ -90,13 +90,16 @@ def get_data(cfg: DictConfig, tokenizer, num_bins=10):
     print("Loading dataset...")
     train_file = to_absolute_path(os.path.join(cfg.data.datapath, cfg.data.train_file))
     val_file = to_absolute_path(os.path.join(cfg.data.datapath, cfg.data.val_file))
+    test_file = to_absolute_path(
+        os.path.join(cfg.data.datapath, cfg.data.val_target_file)
+    )
 
     hf_dataset = load_dataset(
         "json",
         data_files={
             "train": train_file,
             "val": val_file,
-            "test": val_file,
+            "test": test_file,
         },
     )
     print(

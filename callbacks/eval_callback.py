@@ -166,6 +166,7 @@ class EvalCallback(Callback):
                 + f"S {sample['target']} [ {' '.join(map(str,sample['nums']))} ] ,"
                 for sample in self.data[: self.num_examples]
             ]
+            print(test_prompts[0])
 
             # Get predictions
             predictions = self.eval_ll(

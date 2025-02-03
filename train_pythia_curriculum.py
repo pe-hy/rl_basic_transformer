@@ -155,11 +155,13 @@ class LitLLM(L.LightningModule):
 
     def configure_optimizers(self):
         n_steps = self.cfg.model.epochs * self.train_batches
+        print("Total steps: ", n_steps)
+        print("Warmup steps: ", self.train_batches * 2)
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.cfg.optim.lr)
         scheduler = {
             "scheduler": get_cosine_schedule_with_warmup(
                 optimizer,
-                num_warmup_steps=self.train_batches,
+                num_warmup_steps=self.train_batches * 2,
                 num_training_steps=n_steps,
             ),
             "interval": "step",
