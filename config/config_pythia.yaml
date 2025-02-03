@@ -24,7 +24,7 @@ data:
   num_workers: 64
 
 model:
-  name: "Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs-increasing-extra_valid"
+  name: "Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs-increasing-2-extra-valid"
   batch_size: 48
   accumulate_grad_batches: 1
   block_size: 4096

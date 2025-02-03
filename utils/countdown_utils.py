@@ -134,9 +134,12 @@ def parse_trajectory(search_path, mode="dt"):
     if predicted_result != target:
         ret = "Invalid path: Final operation does not result in target."
         return ret
-    if ret == "Valid path.":
-        ret = validate_search_path(raw_search_path=search_path)
-
+    try:
+        if ret == "Valid path.":
+            ret = validate_search_path(raw_search_path=search_path)
+    except:
+        ret = "Error in validation. Path starts with: " + search_path.split("\n")[0]
+        return ret
     return ret
 
 

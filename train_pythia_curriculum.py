@@ -23,37 +23,7 @@ import os
 import logging
 import math
 
-
-def get_cosine_schedule_with_warmup(
-    optimizer: torch.optim.Optimizer,
-    num_warmup_steps: int,
-    num_training_steps: int,
-    num_cycles: float = 0.5,
-    last_epoch: int = -1,
-):
-    """
-    Create a schedule with a learning rate that decreases following the values of the cosine function between the
-    initial lr set in the optimizer to 0, with warmup period at the beginning.
-
-    Args:
-        optimizer: The optimizer for which to schedule the learning rate
-        num_warmup_steps: The number of steps for the warmup phase
-        num_training_steps: The total number of training steps
-        num_cycles: The number of waves in the cosine schedule (default: 0.5)
-        last_epoch: The index of the last epoch when resuming training
-    """
-
-    def lr_lambda(current_step):
-        if current_step < num_warmup_steps:
-            return float(current_step) / float(max(1, num_warmup_steps))
-        progress = float(current_step - num_warmup_steps) / float(
-            max(1, num_training_steps - num_warmup_steps)
-        )
-        return max(
-            0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
-        )
-
-    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda, last_epoch)
+from transformers import get_cosine_schedule_with_warmup
 
 
 class LitLLM(L.LightningModule):
@@ -64,9 +34,10 @@ class LitLLM(L.LightningModule):
         self.preprocessor = preprocessor
         self.stage_num = stage
         _, self.hf_conf = hf_config.get_configs(cfg)
-        self.total_steps = 0  # Global step count
-        self.global_epoch = 0  # Global epoch count
+        self.total_steps = 0
+        self.global_epoch = 0
         self.batches_per_epoch = 0
+        self.train_batches = 0
         self.curriculum_datasets = None
 
     def on_train_epoch_end(self):
@@ -183,61 +154,17 @@ class LitLLM(L.LightningModule):
         return self.llm(idx, targets)
 
     def configure_optimizers(self):
-        """
-        Configure optimizer and learning rate scheduler for curriculum learning.
-        Uses AdamW with weight decay and cosine learning rate schedule with warmup.
-        """
-        # Separate parameters that should have weight decay from those that shouldn't
-        decay_parameters = []
-        no_decay_parameters = []
-
-        for n, p in self.named_parameters():
-            if p.requires_grad:
-                if any(nd in n for nd in ["bias", "LayerNorm.weight"]):
-                    no_decay_parameters.append(p)
-                else:
-                    decay_parameters.append(p)
-
-        optimizer_grouped_parameters = [
-            {
-                "params": decay_parameters,
-                "weight_decay": self.cfg.optim.weight_decay,
-            },
-            {
-                "params": no_decay_parameters,
-                "weight_decay": 0.0,
-            },
-        ]
-
-        optimizer = torch.optim.AdamW(
-            optimizer_grouped_parameters,
-            lr=self.cfg.optim.learning_rate,
-            betas=(self.cfg.optim.beta1, self.cfg.optim.beta2),
-            eps=self.cfg.optim.eps,
-        )
-
-        # Calculate total steps across all curriculum stages
-        opt_steps = self.trainer.estimated_stepping_batches
-
-        # Compute warmup steps (typically 10% of total steps)
-        warmup_steps = int(opt_steps * self.cfg.optim.warmup_ratio)
-
-        scheduler = get_cosine_schedule_with_warmup(
-            optimizer,
-            num_warmup_steps=warmup_steps,
-            num_training_steps=opt_steps,
-            num_cycles=0.5,  # Half cycle for smoother transition between stages
-        )
-
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "step",
-                "frequency": 1,
-                "name": "cosine_schedule",
-            },
+        n_steps = self.cfg.model.epochs * self.train_batches
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.cfg.optim.lr)
+        scheduler = {
+            "scheduler": get_cosine_schedule_with_warmup(
+                optimizer,
+                num_warmup_steps=self.train_batches,
+                num_training_steps=n_steps,
+            ),
+            "interval": "step",
         }
+        return [optimizer], [scheduler]
 
 
 @hydra.main(
@@ -287,6 +214,7 @@ def main(cfg: DictConfig):
     )
 
     for stage, data in enumerate(curriculum_datasets):
+        lit_model.train_batches = len(data["train"])
         lit_model.stage_num = stage
         print("lit_model.stage: ", lit_model.stage_num, "stage: ", stage)
         # print(tokenizer.decode(data["train"][sample_idx]["input_ids"]))

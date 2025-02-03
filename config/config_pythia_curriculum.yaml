@@ -24,7 +24,7 @@ data:
   num_workers: 16
 
 model:
-  name: "Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs-curriculum"
+  name: "Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-dfs-curriculum-cosine"
   batch_size: 48
   accumulate_grad_batches: 1
   block_size: 4096
@@ -34,8 +34,8 @@ model:
   n_embd: 64
   vocab_size: 420
   padded_vocab_size: 420
-  bos_id: 412
-  eos_id: 416
+  bos_id: 410
+  eos_id: 414
   
 eval:
   num_examples: 512
@@ -52,9 +52,4 @@ cur:
   epochs_per_stage: [7, 7, 7, 7, 7, 7, 7, 7, 7, 7]  # For 10 stages
 
 optim:
-  learning_rate: 1e-4
-  weight_decay: 0.1
-  beta1: 0.9
-  beta2: 0.95
-  eps: 1e-8
-  warmup_ratio: 0.1
+  lr: 1e-2
