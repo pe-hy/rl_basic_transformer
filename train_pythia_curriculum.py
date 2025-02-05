@@ -44,32 +44,6 @@ class LitLLM(L.LightningModule):
         """Increment global_epoch by 1 after every epoch (even across stages)."""
         self.global_epoch += 1
 
-    # def save_training_state(self, stage):
-    #     checkpoint = {
-    #         "optimizer": self.trainer.optimizers[0].state_dict(),
-    #         "scheduler": self.trainer.lr_scheduler_configs[0].scheduler.state_dict(),
-    #         "stage": stage,
-    #         "total_steps": self.total_steps,
-    #         "global_epoch": self.global_epoch,
-    #     }
-    #     save_path = os.path.join(
-    #         self.cfg.convert_hf.in_path, f"stage_{stage}_training_state.pt"
-    #     )
-    #     torch.save(checkpoint, save_path)
-
-    # def load_training_state(self, stage):
-    #     load_path = os.path.join(
-    #         self.cfg.convert_hf.in_path, f"stage_{stage-1}_training_state.pt"
-    #     )
-    #     if os.path.exists(load_path):
-    #         checkpoint = torch.load(load_path)
-    #         self.trainer.optimizers[0].load_state_dict(checkpoint["optimizer"])
-    #         self.trainer.lr_scheduler_configs[0].scheduler.load_state_dict(
-    #             checkpoint["scheduler"]
-    #         )
-    #         self.total_steps = checkpoint["total_steps"]
-    #         self.global_epoch = checkpoint["global_epoch"]
-
     def on_validation_epoch_end(self):
         save_path = os.path.join(self.cfg.convert_hf.in_path, f"stage_{self.stage_num}")
         self.llm.model.to(self.llm.preprocessor.device)
@@ -156,13 +130,13 @@ class LitLLM(L.LightningModule):
     def configure_optimizers(self):
         n_steps = self.cfg.model.epochs * self.train_batches
         print("Total steps: ", n_steps)
-        print("Warmup steps: ", self.train_batches * 2)
+        print("Warmup steps: ", 800)
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.cfg.optim.lr)
         scheduler = {
             "scheduler": get_cosine_schedule_with_warmup(
                 optimizer,
-                num_warmup_steps=self.train_batches * 2,
-                num_training_steps=n_steps,
+                num_warmup_steps=800,
+                num_training_steps=7*417,
             ),
             "interval": "step",
         }
@@ -208,9 +182,9 @@ def main(cfg: DictConfig):
     lit_model.curriculum_datasets = curriculum_datasets
 
     logger = WandbLogger(
-        project="sos",
+        project="sos_new",
         name=f"{cfg.model.name}",
-        id="breabg",
+        id="cccokccokc",
         resume="allow",
         config=wandb_config,
     )

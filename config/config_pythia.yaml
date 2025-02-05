@@ -19,7 +19,7 @@ data:
   train_file: "sos_filtered/train1_b4_t30_n2000000_dfs_filtered.json"
   val_target_file: "sos_filtered/test1_b4_t30_n2000000_dfs_filtered.json"
   val_file: "sos_filtered/val1_b4_t30_n2000000_dfs_filtered.json"
-  num_train: 2e5
+  num_train: 2e2
   num_val: 512
   num_workers: 64
 

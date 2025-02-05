@@ -4,11 +4,11 @@ import torch
 from litgpt import LLM
 from litgpt.data import Alpaca2k
 import lightning as L
-from utils.data_pythia_2 import *
+from utils.data_pythia_partial_data import *
 import hydra
 from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig, OmegaConf
-from utils.evaluator_2 import *
+from utils.evaluator_partial_data import *
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 from config import hf_config
 from litgpt.config import configs, Config, name_to_config
