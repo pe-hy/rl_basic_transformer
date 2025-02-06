@@ -6,11 +6,11 @@ from litgpt.data import Alpaca2k
 import lightning as L
 from utils.data_pythia import *
 import hydra
+from config import hf_config
 from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig, OmegaConf
-from callbacks.eval_callback import EvalCallback
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
-from config import hf_config
+from utils.cylinder_evaluator import CylinderEvaluator
 from litgpt.config import configs, Config, name_to_config
 from litgpt.model import GPT
 from litgpt.api import Preprocessor
@@ -37,8 +37,8 @@ class LitLLM(L.LightningModule):
         self.preprocessor = preprocessor
         self.trainer_ckpt_path = trainer_ckpt_path
         self.train_batches = train_batches
+
         _, self.hf_conf = hf_config.get_configs(cfg)
-        print(train_batches)
 
     def setup(self, stage):
         self.preprocessor.tokenizer.save_pretrained(self.cfg.convert_hf.in_path)
@@ -62,12 +62,36 @@ class LitLLM(L.LightningModule):
             batch["attention_mask"],
         )
         logits, loss = self(idx, targets)
-        # accuracy = self.calculate_accuracy(logits, targets)
         self.log(
             "val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True
         )
-        # self.log('val_accuracy', accuracy, on_step=True, on_epoch=True, prog_bar=True)
         return {"val_loss": loss}
+
+    def on_validation_epoch_end(self):
+        test = self.trainer.datamodule.dataset["test"]
+
+        save_path = self.cfg.convert_hf.in_path
+        self.llm.model.to(self.llm.preprocessor.device)
+        self.llm.save(save_path)
+
+        self.llm.model.to(self.device)
+
+        evaluator = CylinderEvaluator(
+            self.cfg,
+            test,
+            self.preprocessor.tokenizer,
+            self.global_step,
+            self.llm.model,
+        )
+        acc = evaluator.evaluate()
+        print(acc)
+        self.log(
+            "CylinderEvaluation/acc",
+            acc,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+        )
 
     def configure_optimizers(self):
         warmup_steps = 10
@@ -81,11 +105,13 @@ class LitLLM(L.LightningModule):
 
     # def configure_optimizers(self):
     #     n_steps = self.cfg.model.epochs * self.train_batches
+    #     warmup_steps = self.train_batches  # 2* epochs worth of steps also viable
+
     #     optimizer = torch.optim.AdamW(self.parameters(), lr=self.cfg.optim.lr)
     #     scheduler = {
     #         "scheduler": get_cosine_schedule_with_warmup(
     #             optimizer,
-    #             num_warmup_steps=n_steps // 100,
+    #             num_warmup_steps=warmup_steps,
     #             num_training_steps=n_steps,
     #         ),
     #         "interval": "step",
@@ -100,7 +126,7 @@ class LitLLM(L.LightningModule):
 
 @hydra.main(
     config_path="config",
-    config_name="config_pythia",
+    config_name="config_pythia_cylinder",
     version_base=None,
 )
 def main(cfg: DictConfig):
@@ -132,27 +158,17 @@ def main(cfg: DictConfig):
     )
 
     logger = WandbLogger(
-        project="sos_new", name=f"{cfg.model.name}", config=wandb_config
+        project="cylinder", name=f"{cfg.model.name}", config=wandb_config
     )
 
-    checkpoint_callback = ModelCheckpoint(
-        monitor="countdown_eval/accuracy",  # what metric to track
-        dirpath=f"temp/{cfg.model.name}/checkpoints",  # where to save checkpoints
-        filename="{epoch:02d}-{countdown_eval-accuracy:.4f}",  # how to name checkpoints
-        save_top_k=2,  # save top 3 models
-        mode="max",  # lower val_loss is better
-    )
+    # checkpoint_callback = ModelCheckpoint(
+    #     monitor="countdown_eval/accuracy",  # what metric to track
+    #     dirpath=f"temp/{cfg.model.name}/checkpoints",  # where to save checkpoints
+    #     filename="{epoch:02d}-{countdown_eval-accuracy:.4f}",  # how to name checkpoints
+    #     save_top_k=2,  # save top 3 models
+    #     mode="max",  # lower val_loss is better
+    # )
 
-    eval_callback = EvalCallback(
-        data_dir=cfg.data.datapath,
-        eval_data=cfg.data.val_file,
-        tokenizer=tokenizer,
-        num_examples=cfg.eval.num_examples,
-        batch_size=cfg.eval.batch_size,
-        config=cfg,
-        eval_interval=cfg.eval.eval_interval,
-        save_path=cfg.convert_hf.in_path,
-    )
     total_params = sum(p.numel() for p in model.parameters())
     print("total number of params:", total_params)
 
@@ -163,7 +179,7 @@ def main(cfg: DictConfig):
         accumulate_grad_batches=accumulate_grad_batches,
         precision="bf16-true",
         val_check_interval=1.0,
-        callbacks=[LearningRateMonitor(), checkpoint_callback, eval_callback],
+        callbacks=[LearningRateMonitor()],
         logger=logger,
     )
     trainer.fit(lit_model, data)

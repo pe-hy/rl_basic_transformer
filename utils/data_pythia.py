@@ -31,16 +31,8 @@ class Datamodule(LightningDataModule):
         self.val_dataset = self.dataset["val"]
         self.test_dataset = self.dataset["test"]
 
-    def collate_fn_pad(self, batch):
-        x, y = zip(*batch)
-        # Pad sequences to the maximum length in the batch
-        x_padded = pad_sequence(x, batch_first=True, padding_value=0)
-        y_padded = pad_sequence(y, batch_first=True, padding_value=0)
-        return x_padded, y_padded
-
     def connect(self, max_seq_length: Optional[int] = None) -> None:
         self.max_seq_length = -1 if max_seq_length is None else max_seq_length
-        return self
 
     def train_dataloader(self):
         return DataLoader(
@@ -76,9 +68,7 @@ class Datamodule(LightningDataModule):
 def get_data(cfg: DictConfig, tokenizer):
     train_file = to_absolute_path(os.path.join(cfg.data.datapath, cfg.data.train_file))
     val_file = to_absolute_path(os.path.join(cfg.data.datapath, cfg.data.val_file))
-    test_file = to_absolute_path(
-        os.path.join(cfg.data.datapath, cfg.data.val_target_file)
-    )
+    test_file = to_absolute_path(os.path.join(cfg.data.datapath, cfg.data.test_file))
 
     hf_dataset = load_dataset(
         "json",
@@ -89,19 +79,14 @@ def get_data(cfg: DictConfig, tokenizer):
         },
     )
 
-    hf_dataset["train"] = hf_dataset["train"].select(range(int(cfg.data["num_train"])))
-    hf_dataset["val"] = hf_dataset["val"].select(range(int(cfg.data["num_val"])))
-    hf_dataset["test"] = hf_dataset["test"].select(range(int(cfg.eval["num_examples"])))
+    # hf_dataset["train"] = hf_dataset["train"].select(range(int(1000)))
 
-    def tokenize(element):
-        text = [
-            tokenizer.bos_token
-            + element["search_path"][e].strip()
-            + tokenizer.eos_token
-            for e in range(len(element["search_path"]))
+    def tokenize(examples):
+        texts = [
+            tokenizer.bos_token + ex + tokenizer.eos_token for ex in examples["text"]
         ]
         outputs = tokenizer(
-            text,
+            texts,
             truncation=True,
             max_length=cfg.model.block_size,
             padding="max_length",
@@ -116,10 +101,15 @@ def get_data(cfg: DictConfig, tokenizer):
     return tokenized_dataset
 
 
-def get_tokenizer(tok_data: DictConfig):
-    tokenizer = PreTrainedTokenizerFast(
-        tokenizer_file=to_absolute_path(tok_data.tokenizer_path)
-    )
+def get_tokenizer(tok_data: DictConfig, for_filter: Optional[bool] = False):
+    if for_filter:
+        tokenizer = PreTrainedTokenizerFast(
+            tokenizer_file=to_absolute_path(f"../{tok_data.tokenizer_path}")
+        )
+    else:
+        tokenizer = PreTrainedTokenizerFast(
+            tokenizer_file=to_absolute_path(tok_data.tokenizer_path)
+        )
     tokenizer.eos_token = "[EOS]"
     tokenizer.unk_token = "[UNK]"
     tokenizer.pad_token = "[PAD]"

@@ -1,0 +1,53 @@
+defaults:  
+  - _self_  
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled  
+  
+hydra:  
+  output_subdir: null  
+  run:  
+    dir: .
+
+data_preprocess:
+  raw_data_path: "../data/solved_problems.pkl"
+  num_test: 512
+  num_val: 2048
+
+tok_data:
+  train_file: "../data/cylinder/train.json"
+  test_file: "../data/cylinder/test.json"
+  val_file: "../data/cylinder/val.json"
+  tokenizer_path: "tokenizer/tokenizer.json"
+
+data:
+  datapath: data
+  train_file: "cylinder/train.json"
+  test_file: "cylinder/test.json"
+  val_file: "cylinder/val.json"
+  num_workers: 0
+
+model:
+  name: "Pythia-${model.n_layer}-${model.n_head}-${model.n_embd}-cylinder-4-increasing-new_valid"
+  batch_size: 256
+  accumulate_grad_batches: 1
+  block_size: 4096
+  epochs: 100
+  n_layer: 6
+  n_head: 4
+  n_embd: 64
+  vocab_size: 80
+  padded_vocab_size: 80
+  bos_id: 72
+  eos_id: 76
+
+optim:
+  lr: 1e-2
+
+eval:
+  num_examples: ${data_preprocess.num_test}
+  batch_size: 128
+  results_dir: "data/eval_results/${model.name}"
+
+convert_hf:
+  in_path: "temp/${model.name}"
+  out_path: "temp/hf_${model.name}"
