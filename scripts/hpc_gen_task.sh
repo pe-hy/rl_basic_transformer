@@ -5,11 +5,11 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=16G
+#SBATCH --mem=64G
 #SBATCH --partition=small-g
 
 module load PyTorch
 
 cd ../src
 
-singularity exec $SIF python3 countdown_generate.py --seed 4 --data_dir ../data/sos/ --min_range 4 --start_range 4 --num_samples 2000000 --search dfs
+singularity exec $SIF python3 countdown_generate.py --seed 4 --data_dir ../data/sos_dfs/ --min_range 4 --start_range 4 --num_samples 1500000 --search dfs

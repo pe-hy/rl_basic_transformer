@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=gen_task
 #SBATCH --account=project_465001424
-#SBATCH --time=03:00:00
+#SBATCH --time=00:10:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
