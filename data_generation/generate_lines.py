@@ -6,7 +6,7 @@ import pickle
 from itertools import product
 import os
 
-with open(os.path.join("data_generation", "graphs.pkl"), "rb") as f:
+with open(os.path.join("data_generation", "graphs2.pkl"), "rb") as f:
     graphs = pickle.load(f)
 
 
@@ -33,7 +33,7 @@ indexes = list(range(len(vecs)))
 samples = []
 
 
-def solve(curr_states, target_node, graphs, log=[], depth=0):
+def solve(curr_states, target_node, graphs, orig_state_len, log=[], depth=0):
     '''
     Solves the problem of reaching target node from current state in graphs by returning the resulting state and log of steps.
     Parameters:
@@ -55,6 +55,7 @@ def solve(curr_states, target_node, graphs, log=[], depth=0):
     
     # check if there is a path
     if len(paths_lst) == 0:
+        log.append(f"{indent}NOPATH {curr_states} TN {target_node}")
         return None, log
     
     # check if current node equals target node
@@ -71,12 +72,12 @@ def solve(curr_states, target_node, graphs, log=[], depth=0):
         # pokud neexistuje enabling, projdu edge
         log.append(f"{indent}RLS {rules}")
         if rules == {}:
-            log.append(f"{indent}NR {curr_states_cpy} TN {target_node}")
+            log.append(f"{indent}NOR {curr_states_cpy} TN {target_node}")
             # pokud má path jeden node, tak je to konec
             curr_states_cpy[0] = path[1]
-            log.append(f"{indent}NRCH {curr_states_cpy}")
+            log.append(f"{indent}NORCH {curr_states_cpy}")
 
-            return solve(curr_states_cpy, target_node, graphs, log, depth+1)
+            return solve(curr_states_cpy, target_node, graphs, orig_state_len, log, depth+1)
 
         # pokud existuje enabling, tak treba automat 1 ma byt ve stavu 2 a automat 2 ma byt ve stavu 3
         # prvni vyresime prvni pravidlo a pak druhe
@@ -89,12 +90,12 @@ def solve(curr_states, target_node, graphs, log=[], depth=0):
 
                 for rule in sorted(rule_set, key=lambda x: x['automata_id']): # sorted znamena setrizene od nejvice zavisleho po nejmene
                     log.append(f"{indent}RULE {rule}")
-
-                    current_sub_state, log = solve(curr_states_cpy[rule['automata_id']:], rule['node_id'], graphs[rule['automata_id']:], log, depth+1)
+                    idx = max(rule['automata_id'] - (orig_state_len - len(curr_states_cpy)), 0)
+                    log.append(f"{indent}IDX {idx} LEN {len(curr_states_cpy)}")
+                    current_sub_state, log = solve(curr_states_cpy[idx:], rule['node_id'], graphs[idx:], orig_state_len, log, depth+1)
 
                     log.append(f"{indent}RCH {current_sub_state}")
                     if current_sub_state == None:
-                        log.append(f"{indent}NPATH {curr_states_cpy[rule['automata_id']:]} TN {rule['node_id']}")
                         found = False
                         break
                     log.append(f"{indent}SUB {curr_states_cpy}")
@@ -110,31 +111,44 @@ def solve(curr_states, target_node, graphs, log=[], depth=0):
                     continue
             
             if found:
-                return solve(curr_states_cpy, target_node, graphs, log, depth+1)
+                return solve(curr_states_cpy, target_node, graphs, orig_state_len, log, depth+1)
             else:
                 continue
-
+    log.append(f"{indent}UNSOL {curr_states_cpy}")            
     return None, log
 
 
+# in nx graph change direction from node 4 to 1 into 1 to 4 in graph with index 2 but save enabling rules on edge
+edge_data = graphs[2].get_edge_data(4, 1)
+
+# Remove the edge from 4 to 1
+graphs[2].remove_edge(4, 1)
+
+# Add the new edge from 1 to 4 with the same attributes
+graphs[2].add_edge(1, 4, **edge_data)
+
 log = []
 import pprint as pprint
-curstate, log = solve([9, 1], 1, list(graphs.values()), log, 0)
+sample = [2,6,1,3,2]
+curstate, log = solve(sample, 0, list(graphs.values()), len(sample), log)
 
 pprint.pprint(log)
 print(curstate)
 
-# # Assuming 'graphs' is a list of NetworkX graphs
-# fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+# Assuming 'graphs' is a list of NetworkX graphs
+fig, axs = plt.subplots(1, 3, figsize=(12, 6))
 
-# # Plot the first graph on the first subplot
-# nx.draw(graphs[0], with_labels=True, node_color='lightblue', arrows=True, ax=axs[0])
-# axs[0].set_title('Graph 1')
+# Plot the first graph on the first subplot
+nx.draw(graphs[0], with_labels=True, node_color='lightblue', arrows=True, ax=axs[0])
+axs[0].set_title('Graph 1')
 
-# # Plot the second graph on the second subplot
-# nx.draw(graphs[1], with_labels=True, node_color='lightgreen', arrows=True, ax=axs[1])
-# axs[1].set_title('Graph 2')
+# Plot the second graph on the second subplot
+nx.draw(graphs[1], with_labels=True, node_color='lightgreen', arrows=True, ax=axs[1])
+axs[1].set_title('Graph 2')
 
-# # Display the plots
-# plt.tight_layout()
-# plt.show()
+nx.draw(graphs[2], with_labels=True, node_color='orange', arrows=True, ax=axs[2])
+axs[2].set_title('Graph 3')
+
+# Display the plots
+plt.tight_layout()
+plt.show()
