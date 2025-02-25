@@ -6,7 +6,7 @@ import pickle
 from itertools import product
 import os
 
-with open(os.path.join("data_generation", "graphs2.pkl"), "rb") as f:
+with open(os.path.join("data_generation", "graphs.pkl"), "rb") as f:
     graphs = pickle.load(f)
 
 
@@ -31,7 +31,35 @@ def get_sample(vector, graphs):
 
 indexes = list(range(len(vecs)))
 samples = []
-
+ 
+def filter_unique_paths(paths_lst):
+    if not paths_lst:
+        return []
+    
+    # Keep track of which paths should be excluded
+    paths_to_exclude = set()
+    
+    # For each path, check if it contains any shorter path as a subsequence
+    for path in paths_lst:
+        for other_path in paths_lst:
+            # Skip if same path or if other_path is not shorter
+            if path == other_path or len(other_path) >= len(path):
+                continue
+                
+            # Check if other_path is a subsequence of path
+            j, k = 0, 0  # j for other_path, k for path
+            while j < len(other_path) and k < len(path):
+                if other_path[j] == path[k]:
+                    j += 1
+                k += 1
+                
+            # If other_path is a subsequence of path, exclude path
+            if j == len(other_path):
+                paths_to_exclude.add(tuple(path))
+                break
+    
+    # Return all paths except those that contain shorter paths as subsequences
+    return [path for path in paths_lst if tuple(path) not in paths_to_exclude]
 
 def solve(curr_states, target_node, graphs, orig_state_len, log=[], depth=0):
     '''
@@ -52,6 +80,9 @@ def solve(curr_states, target_node, graphs, orig_state_len, log=[], depth=0):
     log.append(f"{indent}S {curr_states_cpy} TN {target_node}")
     # get all paths from current state to target node
     paths_lst = list(nx.all_simple_paths(graphs[0], curr_states_cpy[0], target_node))
+    # check if a shorter path isn't already in a different longer path
+    paths_lst = filter_unique_paths(paths_lst)
+    log.append(f"{indent}PL {paths_lst}")
     
     # check if there is a path
     if len(paths_lst) == 0:
@@ -118,25 +149,25 @@ def solve(curr_states, target_node, graphs, orig_state_len, log=[], depth=0):
     return None, log
 
 
-# in nx graph change direction from node 4 to 1 into 1 to 4 in graph with index 2 but save enabling rules on edge
-edge_data = graphs[2].get_edge_data(4, 1)
+# # in nx graph change direction from node 4 to 1 into 1 to 4 in graph with index 2 but save enabling rules on edge
+# edge_data = graphs[2].get_edge_data(4, 1)
 
-# Remove the edge from 4 to 1
-graphs[2].remove_edge(4, 1)
+# # Remove the edge from 4 to 1
+# graphs[2].remove_edge(4, 1)
 
-# Add the new edge from 1 to 4 with the same attributes
-graphs[2].add_edge(1, 4, **edge_data)
+# # Add the new edge from 1 to 4 with the same attributes
+# graphs[2].add_edge(1, 4, **edge_data)
 
 log = []
 import pprint as pprint
-sample = [2,6,1,3,2]
-curstate, log = solve(sample, 0, list(graphs.values()), len(sample), log)
+sample = [3, 1, 1, 2, 3]
+curstate, log = solve(sample, 9, list(graphs.values()), len(sample), log)
 
 pprint.pprint(log)
 print(curstate)
 
 # Assuming 'graphs' is a list of NetworkX graphs
-fig, axs = plt.subplots(1, 3, figsize=(12, 6))
+fig, axs = plt.subplots(1, 2, figsize=(12, 6))
 
 # Plot the first graph on the first subplot
 nx.draw(graphs[0], with_labels=True, node_color='lightblue', arrows=True, ax=axs[0])
@@ -146,8 +177,8 @@ axs[0].set_title('Graph 1')
 nx.draw(graphs[1], with_labels=True, node_color='lightgreen', arrows=True, ax=axs[1])
 axs[1].set_title('Graph 2')
 
-nx.draw(graphs[2], with_labels=True, node_color='orange', arrows=True, ax=axs[2])
-axs[2].set_title('Graph 3')
+# nx.draw(graphs[2], with_labels=True, node_color='orange', arrows=True, ax=axs[2])
+# axs[2].set_title('Graph 3')
 
 # Display the plots
 plt.tight_layout()
