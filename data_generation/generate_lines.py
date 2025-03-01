@@ -77,9 +77,10 @@ def solve(curr_states, target_node, graphs, orig_state_len, log=[], depth=0):
     indent = ' '*depth*2
     # log.append(f"{'-'*50}")
     curr_states_cpy = curr_states.copy()
+    graphs_cpy = graphs.copy()
     log.append(f"{indent}S {curr_states_cpy} TN {target_node}")
     # get all paths from current state to target node
-    paths_lst = list(nx.all_simple_paths(graphs[0], curr_states_cpy[0], target_node))
+    paths_lst = list(nx.all_simple_paths(graphs_cpy[0], curr_states_cpy[0], target_node))
     # check if a shorter path isn't already in a different longer path
     paths_lst = filter_unique_paths(paths_lst)
     log.append(f"{indent}PL {paths_lst}")
@@ -99,7 +100,8 @@ def solve(curr_states, target_node, graphs, orig_state_len, log=[], depth=0):
         log.append(f"{indent}P {path}")
         # projdu hrany po ceste (3-4), ziskam enabling
         curr_states_cpy = curr_states.copy()
-        rules = graphs[0].get_edge_data(curr_states_cpy[0], path[1])
+        graphs_cpy = graphs.copy()
+        rules = graphs_cpy[0].get_edge_data(curr_states_cpy[0], path[1])
         # pokud neexistuje enabling, projdu edge
         log.append(f"{indent}RLS {rules}")
         if rules == {}:
@@ -108,7 +110,7 @@ def solve(curr_states, target_node, graphs, orig_state_len, log=[], depth=0):
             curr_states_cpy[0] = path[1]
             log.append(f"{indent}NORCH {curr_states_cpy}")
 
-            return solve(curr_states_cpy, target_node, graphs, orig_state_len, log, depth+1)
+            return solve(curr_states_cpy, target_node, graphs_cpy, orig_state_len, log, depth+1)
 
         # pokud existuje enabling, tak treba automat 1 ma byt ve stavu 2 a automat 2 ma byt ve stavu 3
         # prvni vyresime prvni pravidlo a pak druhe
@@ -117,20 +119,21 @@ def solve(curr_states, target_node, graphs, orig_state_len, log=[], depth=0):
                 log.append(f"{indent}RS {rule_set}")
 
                 curr_states_cpy = curr_states.copy()
+                graphs_cpy = graphs.copy()
                 found = True
 
                 for rule in sorted(rule_set, key=lambda x: x['automata_id']): # sorted znamena setrizene od nejvice zavisleho po nejmene
                     log.append(f"{indent}RULE {rule}")
                     idx = max(rule['automata_id'] - (orig_state_len - len(curr_states_cpy)), 0)
                     log.append(f"{indent}IDX {idx} LEN {len(curr_states_cpy)}")
-                    current_sub_state, log = solve(curr_states_cpy[idx:], rule['node_id'], graphs[idx:], orig_state_len, log, depth+1)
+                    current_sub_state, log = solve(curr_states_cpy[idx:], rule['node_id'], graphs_cpy[idx:], orig_state_len, log, depth+1)
 
                     log.append(f"{indent}RCH {current_sub_state}")
                     if current_sub_state == None:
                         found = False
                         break
                     log.append(f"{indent}SUB {curr_states_cpy}")
-                    curr_states_cpy[rule['automata_id']:] = current_sub_state
+                    curr_states_cpy[idx:] = current_sub_state
                     log.append(f"{indent}SUBCH {curr_states_cpy}")
 
                 if found:
@@ -142,7 +145,7 @@ def solve(curr_states, target_node, graphs, orig_state_len, log=[], depth=0):
                     continue
             
             if found:
-                return solve(curr_states_cpy, target_node, graphs, orig_state_len, log, depth+1)
+                return solve(curr_states_cpy, target_node, graphs_cpy, orig_state_len, log, depth+1)
             else:
                 continue
     log.append(f"{indent}UNSOL {curr_states_cpy}")            
@@ -160,8 +163,9 @@ def solve(curr_states, target_node, graphs, orig_state_len, log=[], depth=0):
 
 log = []
 import pprint as pprint
-sample = [3, 1, 1, 2, 3]
-curstate, log = solve(sample, 9, list(graphs.values()), len(sample), log)
+sample = [3, 2, 2]
+target_node = 1
+curstate, log = solve(sample, target_node, list(graphs.values()), len(sample), log)
 
 pprint.pprint(log)
 print(curstate)
