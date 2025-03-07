@@ -129,6 +129,7 @@ def process_graphs(graphs, states, target_nodes, orig_states_len, log=[]):
 
     if states is not None:
         log = log_cpy
+        found = False
         for i in [tn for tn in graphs[0].nodes() if tn != states[1]]:
             target_nodes_cpy = target_nodes.copy()
             target_nodes_cpy.append(i)
@@ -136,10 +137,14 @@ def process_graphs(graphs, states, target_nodes, orig_states_len, log=[]):
             if state_tmp is None:
                 continue
             else:
+                found = True
                 log = log_tmp
                 target_nodes = target_nodes_cpy
                 states[1:] = state_tmp
                 break
+
+        if not found:
+            states = None
 
     return states, target_nodes, log
 
@@ -147,8 +152,8 @@ def process_graphs(graphs, states, target_nodes, orig_states_len, log=[]):
 with open(os.path.join("data_generation", "graphs.pkl"), "rb") as f:
     graphs = pickle.load(f)
 
-in_states = [0,1,3]
-in_nodes = [1]
+in_states = [9, 7, 0, 6, 4]
+in_nodes = [3]
 
 logs = []
 
